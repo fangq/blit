@@ -22,7 +22,7 @@ module blit_blqmr_real
 
         type BLQMRSolver
                 integer :: n, nrhs, maxit, state, dopcond, flag, iter
-                real(kind=Kdouble) :: qtol, droptol ! convergence tolerance
+                real(kind=Kdouble) :: qtol, droptol, res, relres ! convergence tolerance
         end type BLQMRSolver
 save
 
@@ -64,7 +64,7 @@ module blit_blqmr_complex
 
         type BLQMRSolver
                 integer :: n, nrhs, maxit, state, dopcond, flag, iter
-                real(kind=Kdouble) :: qtol, droptol ! convergence tolerance
+                real(kind=Kdouble) :: qtol, droptol, res, relres ! convergence tolerance
         end type BLQMRSolver
 save
 
@@ -93,34 +93,38 @@ end module blit_blqmr_complex
 
 program test_blit_blqmr
 use blit_precision
-use blit_blqmr_complex
+use blit_blqmr_real
 implicit none
 
        integer, parameter :: n=5, nz=12
        type (BLQMRSolver) :: qmr
        integer :: Ap(n+1), Ai(nz)
-       complex(kind=Kdouble)   :: Ax(nz), x(n), b(n)
+       real(kind=Kdouble)   :: Ax(nz), x(n,2), b(n,2)
 
-       call BLQMRCreate(qmr,n,1,nz)
+       call BLQMRCreate(qmr,n,2,nz)
 
        Ap=(/0, 2, 5, 9, 10, 12/)+1
        Ai=(/0, 1, 0, 2, 4, 1, 2, 3, 4, 2, 1, 4/)+1
        Ax=(/2., 3., 3., -1., 4., 4., -3., 1., 2., 2., 6., 1./)
-       b=(/8.0,  45.000,  -3.000,   3.000,  19.000/)
-       b=dcmplx(real(b),real(b)*2.0)
-       x=(/0., 0., 1., 0., 0./)
+       b(:,1)=(/8.0,  45.000,  -3.000,   3.000,  19.000/)
+       b(:,2)=(/18.0,  45.000,  -3.000,   3.000,  19.000/)
+       x=0._Kdouble
 
-       qmr%maxit=1000
-       qmr%qtol=1e-9_Kdouble
+       qmr%maxit=100
+       qmr%qtol=1e-5_Kdouble
        qmr%dopcond=1
-       qmr%droptol=0.2_Kdouble
+       qmr%droptol=0.001_Kdouble
 
-       call BLQMRPrep(qmr, Ap, Ai, Ax, nz, x, b)
+       call BLQMRPrep(qmr, Ap, Ai, Ax, nz)
        call BLQMRSolve(qmr,Ap,Ai,Ax, nz, x, b)
 
-       print *, qmr%iter, qmr%flag
-       write (*,'(F8.3 F8.3)') x
+       print *, qmr%iter, qmr%flag, qmr%res, qmr%relres
+       write (*,'(F8.3)') x
 
+       call BLQMRSolve(qmr,Ap,Ai,Ax, nz, x(:,1), b(:,2))
+
+       print *, qmr%iter, qmr%flag, qmr%res, qmr%relres
+       write (*,'(F8.3)') x(:,1)
        call BLQMRDestroy(qmr)
 
 end program test_blit_blqmr

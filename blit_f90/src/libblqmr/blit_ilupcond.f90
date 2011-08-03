@@ -118,7 +118,7 @@ contains
         subroutine ILUPcondSolve(this,Ap,Ai,Ax,rows,cols,x,b,Az,xz,bz)
         implicit none
         type(ILUPcond), intent(inout) :: this
-        integer :: sys, istat, rows, cols, Ap(this%n+1), Ai(this%nz)
+        integer :: i, sys, istat, rows, cols, Ap(this%n+1), Ai(this%nz)
         real(kind=Kdouble),intent(out) :: x(rows, cols)
         real(kind=Kdouble),intent(in)  :: b(rows, cols), Ax(this%nz)
         real(kind=Kdouble),dimension(90)   :: info
@@ -127,11 +127,13 @@ contains
 
         sys = 0
 
-        if(.not. present(bz)) then
-                call umf4solr(sys, Ap-1, Ai-1, Ax, x, b, this%numeric, this%control, info)
-        else
-                call zumf4solr(sys, Ap-1, Ai-1, Ax, Az, x, xz, b, bz, this%numeric, this%control, info)
-        endif
+	do i=1, cols
+            if(.not. present(bz)) then
+                call umf4solr(sys, Ap-1, Ai-1, Ax, x(:,i), b(:,i), this%numeric, this%control, info)
+            else
+                call zumf4solr(sys, Ap-1, Ai-1, Ax, Az, x(:,i), xz(:,i), b(:,i), bz(:,i), this%numeric, this%control, info)
+            endif
+	enddo
         if (info(1) < 0) then
             print *, "Error occurred in umf4solr: ", info(1)
             stop
