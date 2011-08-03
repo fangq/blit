@@ -11,8 +11,6 @@ implicit none
                   ILUPcondPrep, ILUPcondSolve
 
         integer,parameter :: UMFP_DROPTOL = 19
-        real(kind=Kdouble),dimension(0) :: dnull
-        integer(kind=Kint),dimension(0) :: inull
 
         type ILUPcond
                 integer :: n, nz, status, iscomplex    ! Fortran-variables

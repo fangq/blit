@@ -31,11 +31,9 @@
         MTYPE(kind=Kdouble),dimension(:),intent(in)   :: Ax
         MTYPE(kind=Kdouble),dimension(:,:),intent(in) :: x
         MTYPE(kind=Kdouble),dimension(:,:),intent(out):: b
-        integer             :: n,m,i,j,p
+        integer             :: n,i,j,p
 
         n = size(Ap)-1
-        m = size(b,2)
-
         b = 0.0_Kdouble
         do j = 1,n
           do p = Ap(j), Ap(j+1)-1

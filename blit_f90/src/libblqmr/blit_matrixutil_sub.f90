@@ -122,9 +122,8 @@
         MTYPE(kind=Kdouble),dimension(:,:),intent(out) :: R
         MTYPE(kind=Kdouble),dimension(size(A,1),size(A,2))  :: Q
 
-        integer :: m, n, k,j
+        integer :: n, k,j
 
-        m=size(A,1)
         n=size(A,2)
         R=0.0_Kdouble
 
@@ -133,7 +132,7 @@
 #if MTYPEID == MTYPEID_REAL
             R(k,k)=dsqrt(sum(Q(:,k)*Q(:,k)))
 #else
-            R(k,k)=zsqrt(sum(Q(:,k)*Q(:,k)))
+            R(k,k)=sqrt(sum(Q(:,k)*Q(:,k)))
 #endif
             Q(:,k)=Q(:,k)*(1.0_Kdouble/R(k,k))
             do j=k+1,n
@@ -164,7 +163,7 @@
 #if MTYPEID == MTYPEID_REAL
                 write (*,'(F8.3)',advance="no") A(i,j)
 #else
-                write (*,'(A,F8.3,F8.3,A,1X)',advance="no") '(',real(A(i,j)),imag(A(i,j)),')'
+                write (*,'(A,F8.3,F8.3,A,1X)',advance="no") '(',real(A(i,j)),aimag(A(i,j)),')'
 #endif
             enddo
             write (*,'(A)') ''
