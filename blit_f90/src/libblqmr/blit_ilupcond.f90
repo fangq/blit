@@ -28,10 +28,10 @@ contains
 !  
 !=========================================================
 
-        subroutine ILUPcondCreate(this,n,nz,datakind)
+        subroutine ILUPcondCreate(this,n,nz)
         implicit none
         type(ILUPcond), intent(inout) :: this
-        integer :: n, nz, datakind
+        integer :: n, nz
 
         this%n=n
         this%nz=nz
@@ -69,7 +69,7 @@ contains
         implicit none
 
         type(ILUPcond), intent(inout) :: this
-        integer :: status, istat, Ap(this%n+1), Ai(this%nz)
+        integer :: Ap(this%n+1), Ai(this%nz)
         real(kind=Kdouble)  :: droptol, Ax(this%nz)
         real(kind=Kdouble),dimension(90) :: info
         real(kind=Kdouble),intent(in),optional  :: Az(this%nz)
@@ -118,7 +118,7 @@ contains
         subroutine ILUPcondSolve(this,Ap,Ai,Ax,rows,cols,x,b,Az,xz,bz)
         implicit none
         type(ILUPcond), intent(inout) :: this
-        integer :: i, sys, istat, rows, cols, Ap(this%n+1), Ai(this%nz)
+        integer :: i, sys, rows, cols, Ap(this%n+1), Ai(this%nz)
         real(kind=Kdouble),intent(out) :: x(rows, cols)
         real(kind=Kdouble),intent(in)  :: b(rows, cols), Ax(this%nz)
         real(kind=Kdouble),dimension(90)   :: info
@@ -127,13 +127,13 @@ contains
 
         sys = 0
 
-	do i=1, cols
+        do i=1, cols
             if(.not. present(bz)) then
                 call umf4solr(sys, Ap-1, Ai-1, Ax, x(:,i), b(:,i), this%numeric, this%control, info)
             else
                 call zumf4solr(sys, Ap-1, Ai-1, Ax, Az, x(:,i), xz(:,i), b(:,i), bz(:,i), this%numeric, this%control, info)
             endif
-	enddo
+        enddo
         if (info(1) < 0) then
             print *, "Error occurred in umf4solr: ", info(1)
             stop
@@ -160,7 +160,7 @@ implicit none
        real(kind=Kdouble) :: Ax(nz), Az(nz), x(n), b(n), xz(n), bz(n)
 
        ilu%iscomplex=1
-       call ILUPcondCreate(ilu,n,nz,0)
+       call ILUPcondCreate(ilu,n,nz)
 
        Ap=(/0, 2, 5, 9, 10, 12/)+1
        Ai=(/0, 1, 0, 2, 4, 1, 2, 3, 4, 2, 1, 4/)+1

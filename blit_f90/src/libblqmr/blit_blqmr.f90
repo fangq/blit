@@ -101,7 +101,7 @@ implicit none
        integer :: Ap(n+1), Ai(nz)
        real(kind=Kdouble)   :: Ax(nz), x(n,2), b(n,2)
 
-       call BLQMRCreate(qmr,n,2,nz)
+       call BLQMRCreate(qmr,n,2)
 
        Ap=(/0, 2, 5, 9, 10, 12/)+1
        Ai=(/0, 1, 0, 2, 4, 1, 2, 3, 4, 2, 1, 4/)+1

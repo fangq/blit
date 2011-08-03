@@ -2,11 +2,11 @@
 !  
 !=========================================================
 
-        subroutine BLQMROnCreate(this, n, nrhs, nnz)
+        subroutine BLQMROnCreate(this, n, nrhs)
         implicit none
 
         type(BLQMRSolver), intent(inout) :: this
-        integer :: n, nrhs, nnz
+        integer :: n, nrhs
 
         this%n=n
         this%nrhs=nrhs
@@ -35,11 +35,11 @@
         subroutine BLQMROnDestroy(this, isresize)
         implicit none
 
-        type(BLQMRSolver), intent(in) :: this
-	integer, optional :: isresize
+        type(BLQMRSolver), intent(inout) :: this
+        integer, optional :: isresize
 
-	if(.not. present(isresize)) &
-	        call ILUPcondDestroy(ilu)
+        if(.not. present(isresize)) &
+                call ILUPcondDestroy(ilu)
 
         if(allocated(v))     deallocate(v)
         if(allocated(vt))    deallocate(vt)
@@ -60,6 +60,8 @@
         if(allocated(taot))  deallocate(taot)
         if(allocated(p))     deallocate(p)
         if(allocated(x0))     deallocate(x0)
+        
+        this%state=-1;
 
         end subroutine BLQMROnDestroy
 
@@ -71,11 +73,11 @@
         implicit none
 
         type(BLQMRSolver), intent(inout) :: this
-        integer :: nnz, status, i, t3, t3p, Ap(this%n+1), Ai(nnz)
+        integer :: nnz, Ap(this%n+1), Ai(nnz)
         MTYPE(kind=Kdouble) :: Ax(nnz)
 
         if(this%dopcond > 0) then
-                call ILUPcondCreate(ilu,this%n,nnz,0)
+                call ILUPcondCreate(ilu,this%n,nnz)
 #if MTYPEID == MTYPEID_COMPLEX
                 call ILUPcondPrep(ilu,Ap, Ai, real(Ax), this%droptol,imag(Ax))
 #else
@@ -97,24 +99,22 @@
         implicit none
 
         type(BLQMRSolver), intent(inout) :: this
-        integer :: status,i,k,m,t3,t3p,t3n,t3nn, Ap(:), Ai(:), nnz
+        integer :: i,k,m,t3,t3p,t3n,t3nn, Ap(:), Ai(:), nnz
         real(kind=Kdouble) :: Qres, Qres1, Qres0
         MTYPE(kind=Kdouble) :: Ax(:), b(:,:), x(:,:)
-        MTYPE(kind=Kdouble),dimension(size(b,2),size(b,2)) :: tmp0,tmp1,tmp2,tmp3
+        MTYPE(kind=Kdouble),dimension(size(b,2),size(b,2)) :: tmp0,tmp1,tmp2
         MTYPE(kind=Kdouble),dimension(size(b,2)*2,size(b,2)) :: ZZ,zetafull
         MTYPE(kind=Kdouble),dimension(size(b,2)*2,size(b,2)*2) :: QQ
         MTYPE(kind=Kdouble),dimension(this%n,size(b,2)) :: tmp
-        MTYPE(kind=Kdouble),dimension(min(this%n,size(b,2))) :: tau
-        MTYPE(kind=Kdouble),dimension(this%n) :: work
 #if MTYPEID == MTYPEID_COMPLEX
         real(kind=Kdouble),dimension(this%n,size(b,2),2) :: rtmp
 #endif
 
-	if(size(b,2) /= this%nrhs) then ! resize the blqmr object
+        if(size(b,2) /= this%nrhs) then ! resize the blqmr object
                this%nrhs=size(b,2)
-	       call BLQMROnDestroy(this, 1)
-	       call BLQMROnCreate(this,this%n,this%nrhs,nnz)
-	endif
+               call BLQMROnDestroy(this, 1)
+               call BLQMROnCreate(this,this%n,this%nrhs)
+        endif
 
         m=this%nrhs
         if(this%state==0) call BLQMRPrep(this, Ap, Ai, Ax, nnz)
@@ -141,8 +141,9 @@
         Qd(:,:,t3n)=Qa(:,:,t3)
         Qd(:,:,t3) =Qa(:,:,t3)
 
-	x0=x
-	this%relres=1._Kdouble
+        x0=x
+        this%relres=1._Kdouble
+        Qres1=-1._Kdouble
         call spmulmat(Ap,Ai,Ax,x0,tmp)
         vt=b-tmp
 
@@ -155,10 +156,10 @@
                         rtmp(:,:,1),real(tmp),imag(Ax),rtmp(:,:,2),imag(tmp))
                 vt=dcmplx(rtmp(:,:,1),rtmp(:,:,2))
 #endif
-		if(isnan(real(sum(vt-vt)))) then
-			this%flag=2
-			return
-		endif
+                if(isnan(real(sum(vt-vt)))) then
+                        this%flag=2
+                        return
+                endif
         endif
 
         t3p=modulo(1,3)+1

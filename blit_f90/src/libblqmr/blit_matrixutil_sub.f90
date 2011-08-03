@@ -38,7 +38,7 @@
 #endif
         if(info/=0) then
                 print *, 'error encontered when calling dgetrf in MatrixInversion, code:', info
-		call PrintMatrix(A,'A = ')
+                call PrintMatrix(A,'A = ')
                 stop
         endif
 #if MTYPEID == MTYPEID_REAL
@@ -48,7 +48,7 @@
 #endif
         if(info/=0) then
                 print *, 'error encontered when calling dgetri in MatrixInversion, code:', info
-		call PrintMatrix(A,'A = ')
+                call PrintMatrix(A,'A = ')
                 stop
         endif
 
