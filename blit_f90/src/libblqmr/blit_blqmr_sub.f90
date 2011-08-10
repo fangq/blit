@@ -79,7 +79,7 @@
         if(this%dopcond > 0) then
                 call ILUPcondCreate(ilu,this%n,nnz)
 #if MTYPEID == MTYPEID_COMPLEX
-                call ILUPcondPrep(ilu,Ap, Ai, real(Ax), this%droptol,imag(Ax))
+                call ILUPcondPrep(ilu,Ap, Ai, real(Ax), this%droptol,aimag(Ax))
 #else
                 call ILUPcondPrep(ilu,Ap, Ai, Ax, this%droptol)
 #endif
@@ -153,8 +153,8 @@
                 call ILUPcondSolve(ilu,Ap,Ai,Ax,this%n,this%nrhs,vt,tmp)
 #else
                 call ILUPcondSolve(ilu,Ap,Ai,real(Ax),this%n,this%nrhs,&
-                        rtmp(:,:,1),real(tmp),imag(Ax),rtmp(:,:,2),imag(tmp))
-                vt=dcmplx(rtmp(:,:,1),rtmp(:,:,2))
+                        rtmp(:,:,1),real(tmp),aimag(Ax),rtmp(:,:,2),aimag(tmp))
+                vt=cmplx(rtmp(:,:,1),rtmp(:,:,2))
 #endif
                 if(isnan(real(sum(vt-vt)))) then
                         this%flag=2
@@ -188,8 +188,9 @@
 #if MTYPEID == MTYPEID_REAL
                         call ILUPcondSolve(ilu,Ap,Ai,Ax,this%n,this%nrhs,vt,tmp)
 #else
-                        call ILUPcondSolve(ilu,Ap,Ai,real(Ax),this%n,this%nrhs,rtmp(:,:,1),real(tmp),imag(Ax),rtmp(:,:,2),imag(tmp))
-                        vt=dcmplx(rtmp(:,:,1),rtmp(:,:,2))
+                        call ILUPcondSolve(ilu,Ap,Ai,real(Ax),this%n,this%nrhs,rtmp(:,:,1),real(tmp),aimag(Ax),&
+                              rtmp(:,:,2),aimag(tmp))
+                        vt=cmplx(rtmp(:,:,1),rtmp(:,:,2))
 #endif
                         vt=vt-matmul(v(:,:,t3n),transpose(beta(:,:,t3)))
                 else

@@ -83,7 +83,7 @@ implicit none
        A(3,4)=1._Kdouble
        A(5,1)=9._Kdouble
        
-       Ac=dcmplx(A,A*0.5_Kdouble)
+       Ac=cmplx(A,A*0.5_Kdouble)
        call disp(Ac, 'A_complex =')
 
        call inv(A,invA)
