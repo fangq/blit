@@ -75,6 +75,7 @@ contains
         if(.not. present(Az)) then
                 call umf4def(this%control)
         else
+                this%iscomplex=1
                 call zumf4def(this%control)
         endif
         !this%control(1) = 2

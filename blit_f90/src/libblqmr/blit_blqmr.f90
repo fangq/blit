@@ -21,16 +21,12 @@ module blit_blqmr_real
         interface BLQMRDestroy; module procedure BLQMROnDestroy; end interface
 
         type BLQMRSolver
-                integer :: n, nrhs, maxit, state, dopcond, flag, iter
+                integer :: n, nrhs, maxit, state, dopcond, flag, iter, isquasires, debug
                 real(kind=Kdouble) :: qtol, droptol, res, relres ! convergence tolerance
         end type BLQMRSolver
 save
 
-#define MTYPE       real
-        MTYPE(kind=Kdouble),dimension(:,:),allocatable   :: vt,alpha,theta,zeta,zetat,eta,tao,taot,x0
-        MTYPE(kind=Kdouble),dimension(:,:,:),allocatable :: beta,Qa,Qc,v,omega,Qb,Qd,p
         type (ILUPcond) :: ilu ! private ILU preconditioner
-#undef MTYPE
 
 contains
 
@@ -63,16 +59,12 @@ module blit_blqmr_complex
 
 
         type BLQMRSolver
-                integer :: n, nrhs, maxit, state, dopcond, flag, iter
+                integer :: n, nrhs, maxit, state, dopcond, flag, iter, isquasires, debug
                 real(kind=Kdouble) :: qtol, droptol, res, relres ! convergence tolerance
         end type BLQMRSolver
 save
 
-#define MTYPE       complex
-        MTYPE(kind=Kdouble),dimension(:,:),allocatable   :: vt,alpha,theta,zeta,zetat,eta,tao,taot,x0
-        MTYPE(kind=Kdouble),dimension(:,:,:),allocatable :: beta,Qa,Qc,v,omega,Qb,Qd,p
         type (ILUPcond) :: ilu ! private ILU preconditioner
-#undef MTYPE
 
 contains
 
@@ -101,7 +93,7 @@ implicit none
        integer :: Ap(n+1), Ai(nz)
        real(kind=Kdouble)   :: Ax(nz), x(n,2), b(n,2)
 
-       call BLQMRCreate(qmr,n,2)
+       call BLQMRCreate(qmr,n)
 
        Ap=(/0, 2, 5, 9, 10, 12/)+1
        Ai=(/0, 1, 0, 2, 4, 1, 2, 3, 4, 2, 1, 4/)+1
@@ -110,10 +102,11 @@ implicit none
        b(:,2)=(/18.0,  45.000,  -3.000,   3.000,  19.000/)
        x=0._Kdouble
 
-       qmr%maxit=100
+       qmr%maxit=1
        qmr%qtol=1e-5_Kdouble
        qmr%dopcond=1
        qmr%droptol=0.001_Kdouble
+       qmr%isquasires=0
 
        call BLQMRPrep(qmr, Ap, Ai, Ax, nz)
        call BLQMRSolve(qmr,Ap,Ai,Ax, nz, x, b)
@@ -121,7 +114,7 @@ implicit none
        print *, qmr%iter, qmr%flag, qmr%res, qmr%relres
        write (*,'(F8.3)') x
 
-       call BLQMRSolve(qmr,Ap,Ai,Ax, nz, x(:,1), b(:,2))
+       call BLQMRSolve(qmr,Ap,Ai,Ax, nz, x(:,1:1), b(:,1:1))
 
        print *, qmr%iter, qmr%flag, qmr%res, qmr%relres
        write (*,'(F8.3)') x(:,1)

@@ -2,29 +2,20 @@
 !  
 !=========================================================
 
-        subroutine BLQMROnCreate(this, n, nrhs)
+        subroutine BLQMROnCreate(this, n)
         implicit none
 
         type(BLQMRSolver), intent(inout) :: this
-        integer :: n, nrhs
+        integer :: n
 
         this%n=n
-        this%nrhs=nrhs
-
-        allocate(vt(n,nrhs),alpha(nrhs,nrhs),zeta(nrhs,nrhs))
-        allocate(zetat(nrhs,nrhs),eta(nrhs,nrhs),tao(nrhs,nrhs))
-        allocate(taot(nrhs,nrhs),theta(nrhs,nrhs),x0(n,nrhs))
-
-        ! only need 2 copies, allocate 3 to simplify
-        allocate(beta(nrhs,nrhs,3),Qa(nrhs,nrhs,3),Qc(nrhs,nrhs,3)) 
-        allocate(v(n,nrhs,3),omega(nrhs,nrhs,3))
-        allocate(Qb(nrhs,nrhs,3),Qd(nrhs,nrhs,3),p(n,nrhs,3))
-
         this%qtol=1e-6_Kdouble
         this%droptol=0.001_Kdouble
         this%maxit=this%n
         this%state=0
         this%dopcond=1
+        this%isquasires=1
+        this%debug=0
 
         end subroutine BLQMROnCreate
 
@@ -41,26 +32,6 @@
         if(.not. present(isresize)) &
                 call ILUPcondDestroy(ilu)
 
-        if(allocated(v))     deallocate(v)
-        if(allocated(vt))    deallocate(vt)
-        if(allocated(beta))  deallocate(beta)
-        
-        if(allocated(alpha)) deallocate(alpha)
-        if(allocated(omega)) deallocate(omega)
-        if(allocated(theta)) deallocate(theta)
-        if(allocated(Qa))    deallocate(Qa)
-        if(allocated(Qb))    deallocate(Qb)
-        if(allocated(Qc))    deallocate(Qc)
-        if(allocated(Qd))    deallocate(Qd)
-        if(allocated(zeta))  deallocate(zeta)
-
-        if(allocated(zetat)) deallocate(zetat)
-        if(allocated(eta))   deallocate(eta)
-        if(allocated(tao))   deallocate(tao)
-        if(allocated(taot))  deallocate(taot)
-        if(allocated(p))     deallocate(p)
-        if(allocated(x0))     deallocate(x0)
-        
         this%state=-1;
 
         end subroutine BLQMROnDestroy
@@ -79,6 +50,7 @@
         if(this%dopcond > 0) then
                 call ILUPcondCreate(ilu,this%n,nnz)
 #if MTYPEID == MTYPEID_COMPLEX
+                ilu%iscomplex=1
                 call ILUPcondPrep(ilu,Ap, Ai, real(Ax), this%droptol,aimag(Ax))
 #else
                 call ILUPcondPrep(ilu,Ap, Ai, Ax, this%droptol)
@@ -100,23 +72,24 @@
 
         type(BLQMRSolver), intent(inout) :: this
         integer :: i,k,m,t3,t3p,t3n,t3nn, Ap(:), Ai(:), nnz
+        integer, parameter :: DEBUG_RES=1
         real(kind=Kdouble) :: Qres, Qres1, Qres0
         MTYPE(kind=Kdouble) :: Ax(:), b(:,:), x(:,:)
         MTYPE(kind=Kdouble),dimension(size(b,2),size(b,2)) :: tmp0,tmp1,tmp2
         MTYPE(kind=Kdouble),dimension(size(b,2)*2,size(b,2)) :: ZZ,zetafull
         MTYPE(kind=Kdouble),dimension(size(b,2)*2,size(b,2)*2) :: QQ
-        MTYPE(kind=Kdouble),dimension(this%n,size(b,2)) :: tmp
+        MTYPE(kind=Kdouble),dimension(this%n,size(b,2)) :: tmp, omegat
+        MTYPE(kind=Kdouble),dimension(size(b,2),size(b,2))  :: alpha,theta,zeta,zetat,eta,tau,taut
+        MTYPE(kind=Kdouble),dimension(size(b,2),size(b,2),3):: beta,Qa,Qb,Qc,Qd,omega
+        MTYPE(kind=Kdouble),dimension(this%n,size(b,2))  :: vt,x0
+        MTYPE(kind=Kdouble),dimension(this%n,size(b,2),3)  :: v,p
 #if MTYPEID == MTYPEID_COMPLEX
         real(kind=Kdouble),dimension(this%n,size(b,2),2) :: rtmp
 #endif
 
-        if(size(b,2) /= this%nrhs) then ! resize the blqmr object
-               this%nrhs=size(b,2)
-               call BLQMROnDestroy(this, 1)
-               call BLQMROnCreate(this,this%n,this%nrhs)
-        endif
-
+        this%nrhs=size(b,2)
         m=this%nrhs
+
         if(this%state==0) call BLQMRPrep(this, Ap, Ai, Ax, nnz)
 
         v=0.0_Kdouble
@@ -126,8 +99,8 @@
         zeta=0.0_Kdouble
         zetat=0.0_Kdouble
         eta=0.0_Kdouble
-        tao=0.0_Kdouble
-        taot=0.0_Kdouble
+        tau=0.0_Kdouble
+        taut=0.0_Kdouble
         beta=0.0_Kdouble
         Qa=0.0_Kdouble
         Qb=0.0_Kdouble
@@ -171,13 +144,24 @@
 #else
         forall (i=1:this%nrhs) omega(i,i,t3p)=sqrt(sum(conjg(v(:,i,t3p))*v(:,i,t3p)))
 #endif
-        taot=matmul(omega(:,:,t3p),beta(:,:,t3p))
+        taut=matmul(omega(:,:,t3p),beta(:,:,t3p))
 
+        if(this%isquasires>0) then
 #if MTYPEID == MTYPEID_REAL
-        Qres0=maxval(sqrt(sum(taot*taot,1)))
+            Qres0=maxval(sqrt(sum(taut*taut,1)))
 #else
-        Qres0=maxval(sqrt(sum(abs(conjg(taot)*taot),1)))
+            Qres0=maxval(sqrt(sum(abs(conjg(taut)*taut),1)))
 #endif
+        else
+            do i=1, m
+                omegat(:,i)=v(:,i,t3p)*(1._Kdouble/omega(i,i,t3p))
+            enddo
+#if MTYPEID == MTYPEID_REAL
+            Qres0=maxval(sqrt(sum(vt*vt,1)))
+#else
+            Qres0=maxval(sqrt(sum(abs(conjg(vt)*vt),1)))
+#endif
+        endif
         this%flag=1
         do k=1,this%maxit
                 t3=modulo(k,3)+1;t3p=modulo(k+1,3)+1;t3n=modulo(k-1,3)+1;t3nn=modulo(k-2,3)+1
@@ -233,16 +217,35 @@
                 call inv(zeta,tmp0)
 
                 p(:,:,t3)=matmul((v(:,:,t3)-matmul(p(:,:,t3n),eta)-matmul(p(:,:,t3nn),theta)),tmp0)
-                tao=matmul(Qa(:,:,t3),taot)
-                x=x+matmul(p(:,:,t3),tao)
-                taot=matmul(Qc(:,:,t3),taot)
+                tau=matmul(Qa(:,:,t3),taut)
+                x=x+matmul(p(:,:,t3),tau)
+                taut=matmul(Qc(:,:,t3),taut)
 
+                if(this%isquasires>0) then
 #if MTYPEID == MTYPEID_REAL
-                Qres=maxval(sqrt(sum(taot*taot,1)))
+                    Qres=maxval(sqrt(sum(taut*taut,1)))
 #else
-                Qres=maxval(sqrt(sum(abs(conjg(taot)*taot),1)))
+                    Qres=maxval(sqrt(sum(abs(conjg(taut)*taut),1)))
 #endif
+                else
+                    do i=1, m
+                       tmp0(i,:)=Qd(:,i,t3)*(1._Kdouble/omega(i,i,t3p))
+                    enddo
+#if MTYPEID == MTYPEID_REAL
+                    omegat=matmul(omegat,transpose(Qc(:,:,t3)))+matmul(v(:,:,t3p),tmp0)
+                    tmp=matmul(omegat,taut)
+                    Qres=maxval(sqrt(sum(tmp*tmp,1)))
+#else
+                    omegat=matmul(omegat,transpose(conjg(Qc(:,:,t3))))+matmul(v(:,:,t3p),conjg(tmp0))
+                    tmp=conjg(matmul(omegat,taut))
+                    Qres=maxval(sqrt(sum(abs(conjg(tmp)*tmp),1)))
+#endif                
+                endif
                 this%res=Qres
+
+                if(iand(this%debug,DEBUG_RES)>0) &
+                    write(*,'(A,I4,A,E16.8)') 'Iteration [',k,'] Max Residual =', Qres
+
                 if(k>1 .and. Qres==Qres1) then
                      this%flag=3
                      exit
