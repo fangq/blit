@@ -30,7 +30,7 @@
         integer, optional :: isresize
 
         if(.not. present(isresize)) &
-                call ILUPcondDestroy(ilu)
+                call ILUPcondDestroy(this%ilu)
 
         this%state=-1;
 
@@ -48,12 +48,12 @@
         MTYPE(kind=Kdouble) :: Ax(nnz)
 
         if(this%dopcond > 0) then
-                call ILUPcondCreate(ilu,this%n,nnz)
+                call ILUPcondCreate(this%ilu,this%n,nnz)
 #if MTYPEID == MTYPEID_COMPLEX
-                ilu%iscomplex=1
-                call ILUPcondPrep(ilu,Ap, Ai, real(Ax), this%droptol,aimag(Ax))
+                this%ilu%iscomplex=1
+                call ILUPcondPrep(this%ilu,Ap, Ai, real(Ax), this%droptol,aimag(Ax))
 #else
-                call ILUPcondPrep(ilu,Ap, Ai, Ax, this%droptol)
+                call ILUPcondPrep(this%ilu,Ap, Ai, Ax, this%droptol)
 #endif
         endif
 
@@ -81,7 +81,7 @@
         MTYPE(kind=Kdouble),dimension(this%n,size(b,2)) :: tmp, omegat
         MTYPE(kind=Kdouble),dimension(size(b,2),size(b,2))  :: alpha,theta,zeta,zetat,eta,tau,taut
         MTYPE(kind=Kdouble),dimension(size(b,2),size(b,2),3):: beta,Qa,Qb,Qc,Qd,omega
-        MTYPE(kind=Kdouble),dimension(this%n,size(b,2))  :: vt,x0
+        MTYPE(kind=Kdouble),dimension(this%n,size(b,2))  :: vt
         MTYPE(kind=Kdouble),dimension(this%n,size(b,2),3)  :: v,p
 #if MTYPEID == MTYPEID_COMPLEX
         real(kind=Kdouble),dimension(this%n,size(b,2),2) :: rtmp
@@ -114,18 +114,17 @@
         Qd(:,:,t3n)=Qa(:,:,t3)
         Qd(:,:,t3) =Qa(:,:,t3)
 
-        x0=x
         this%relres=1._Kdouble
         Qres1=-1._Kdouble
-        call spmulmat(Ap,Ai,Ax,x0,tmp)
+        call spmulmat(Ap,Ai,Ax,x,tmp)
         vt=b-tmp
 
         if(this%dopcond>0) then
                 tmp=vt
 #if MTYPEID == MTYPEID_REAL
-                call ILUPcondSolve(ilu,Ap,Ai,Ax,this%n,this%nrhs,vt,tmp)
+                call ILUPcondSolve(this%ilu,Ap,Ai,Ax,this%n,this%nrhs,vt,tmp)
 #else
-                call ILUPcondSolve(ilu,Ap,Ai,real(Ax),this%n,this%nrhs,&
+                call ILUPcondSolve(this%ilu,Ap,Ai,real(Ax),this%n,this%nrhs,&
                         rtmp(:,:,1),real(tmp),aimag(Ax),rtmp(:,:,2),aimag(tmp))
                 vt=cmplx(rtmp(:,:,1),rtmp(:,:,2))
 #endif
@@ -170,9 +169,9 @@
 
                 if(this%dopcond > 0) then
 #if MTYPEID == MTYPEID_REAL
-                        call ILUPcondSolve(ilu,Ap,Ai,Ax,this%n,this%nrhs,vt,tmp)
+                        call ILUPcondSolve(this%ilu,Ap,Ai,Ax,this%n,this%nrhs,vt,tmp)
 #else
-                        call ILUPcondSolve(ilu,Ap,Ai,real(Ax),this%n,this%nrhs,rtmp(:,:,1),real(tmp),aimag(Ax),&
+                        call ILUPcondSolve(this%ilu,Ap,Ai,real(Ax),this%n,this%nrhs,rtmp(:,:,1),real(tmp),aimag(Ax),&
                               rtmp(:,:,2),aimag(tmp))
                         vt=cmplx(rtmp(:,:,1),rtmp(:,:,2))
 #endif

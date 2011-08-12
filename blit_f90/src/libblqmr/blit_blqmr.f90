@@ -23,10 +23,10 @@ module blit_blqmr_real
         type BLQMRSolver
                 integer :: n, nrhs, maxit, state, dopcond, flag, iter, isquasires, debug
                 real(kind=Kdouble) :: qtol, droptol, res, relres ! convergence tolerance
+                type (ILUPcond) :: ilu ! private ILU preconditioner
         end type BLQMRSolver
 save
 
-        type (ILUPcond) :: ilu ! private ILU preconditioner
 
 contains
 
@@ -61,10 +61,9 @@ module blit_blqmr_complex
         type BLQMRSolver
                 integer :: n, nrhs, maxit, state, dopcond, flag, iter, isquasires, debug
                 real(kind=Kdouble) :: qtol, droptol, res, relres ! convergence tolerance
+                type (ILUPcond) :: ilu ! private ILU preconditioner
         end type BLQMRSolver
 save
-
-        type (ILUPcond) :: ilu ! private ILU preconditioner
 
 contains
 
