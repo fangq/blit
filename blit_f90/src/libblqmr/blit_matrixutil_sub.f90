@@ -84,7 +84,7 @@
                 print *, 'error encontered when calling dgeqrf in QRDecomposition, code:', info
                 stop
         endif
-        Q=tmp
+        Q(:,1:n)=tmp
         do i=1,n
            do j=i,n
              R(i,j)=tmp(i,j)

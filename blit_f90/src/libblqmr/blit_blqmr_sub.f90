@@ -244,7 +244,7 @@
                 this%res=Qres
 
                 if(iand(this%debug,DEBUG_RES)>0) &
-                    write(*,'(A,I4,A,E16.8)') 'Iteration [',k,'] Max Residual =', Qres
+                    write(*,'(A,I4,A,E16.8,A,E16.8)') 'Iteration [',k,'] MaxResidual=', Qres, ', Relative=', Qres/Qres0
 
                 if(k>1 .and. Qres==Qres1) then
                      this%flag=3
