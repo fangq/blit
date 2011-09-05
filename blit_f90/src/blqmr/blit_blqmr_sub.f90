@@ -1,6 +1,27 @@
-!=========================================================
-!  
-!=========================================================
+!!*************************************************************************
+!!
+!!  Blit - An open-source library for block iterative sparse linear solvers
+!!
+!!  Copyright 2011, Qianqian Fang <fangq at nmr.mgh.harvard.edu>
+!!
+!!  URL: http://blit.sourceforge.net
+!!
+!!  Project maintainer: 
+!!      Qianqian Fang, PhD
+!!      Martinos Center for Biomedical Imaging
+!!      Massachusetts General Hospital
+!!      Harvard Medical School
+!!      149 13th Street, Charlestown, MA 02129
+!!
+!!  License:
+!!      BSD or LGPL or GPL, see LICENSE_*.txt for more details
+!!
+!!*************************************************************************
+
+!--------------------------------------------------------------------------
+!> \fn BLQMROnCreate(this, n)
+!> \brief initialize a block-QMR solver object for an n-by-n sparse system
+!--------------------------------------------------------------------------
 
         subroutine BLQMROnCreate(this, n)
         implicit none
@@ -19,9 +40,10 @@
 
         end subroutine BLQMROnCreate
 
-!=========================================================
-!  
-!=========================================================
+!--------------------------------------------------------------------------
+!> \fn BLQMROnDestroy(this, isresize)
+!> \brief desctroy or resize a BLQMR solver object
+!--------------------------------------------------------------------------
 
         subroutine BLQMROnDestroy(this, isresize)
         implicit none
@@ -36,9 +58,10 @@
 
         end subroutine BLQMROnDestroy
 
-!=========================================================
-!  
-!=========================================================
+!--------------------------------------------------------------------------
+!> \fn BLQMRPrep(this, Ap, Ai, Ax, nnz)
+!> \brief create preconditioner and get ready for solving a block system
+!--------------------------------------------------------------------------
 
         subroutine BLQMRPrep(this, Ap, Ai, Ax, nnz)
         implicit none
@@ -63,9 +86,10 @@
 
         end subroutine BLQMRPrep
 
-!=========================================================
-!  
-!=========================================================
+!--------------------------------------------------------------------------
+!> \fn BLQMRSolve(this, Ap, Ai, Ax, nnz, x, b)
+!> \brief solving a real or complex system using BLQMR algorithm
+!--------------------------------------------------------------------------
 
         subroutine BLQMRSolve(this, Ap, Ai, Ax, nnz, x, b)
         implicit none

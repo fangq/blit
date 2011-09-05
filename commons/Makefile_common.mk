@@ -114,7 +114,6 @@ $(OBJDIR)/%$(OBJSUFFIX): %.cpp
 
 ##  Compile .f90 files ##
 $(OBJDIR)/%$(OBJSUFFIX): %.f90
-	echo $(F90)
 	$(F90) $(INCLUDEDIRS) $(F90OPT) -c -o $@  $<
 
 ##  Compile .c files  ##

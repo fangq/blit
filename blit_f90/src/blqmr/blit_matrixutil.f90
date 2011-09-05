@@ -1,6 +1,31 @@
+!!*************************************************************************
+!!
+!!  Blit - An open-source library for block iterative sparse linear solvers
+!!
+!!  Copyright 2011, Qianqian Fang <fangq at nmr.mgh.harvard.edu>
+!!
+!!  URL: http://blit.sourceforge.net
+!!
+!!  Project maintainer: 
+!!      Qianqian Fang, PhD
+!!      Martinos Center for Biomedical Imaging
+!!      Massachusetts General Hospital
+!!      Harvard Medical School
+!!      149 13th Street, Charlestown, MA 02129
+!!
+!!  License:
+!!      BSD or LGPL or GPL, see LICENSE_*.txt for more details
+!!
+!!*************************************************************************
+
 !==========================================================================
-! Full Matrix Utilities - for real matrices
+!>\brief Full Matrix Utilities 
 !==========================================================================
+
+!--------------------------------------------------------------------------
+!>\class blit_matrixutil_real
+!>\brief Full Matrix Utilities - for real matrices
+!--------------------------------------------------------------------------
 
 #define MTYPEID_REAL    1
 #define MTYPEID_COMPLEX 2
@@ -27,9 +52,10 @@ contains
 
 end module blit_matrixutil_real
 
-!==========================================================================
-! Full Matrix Utilities - for complex matrices
-!==========================================================================
+!--------------------------------------------------------------------------
+!>\class blit_matrixutil_complex
+!>\brief Full Matrix Utilities - for complex matrices
+!--------------------------------------------------------------------------
 
 module blit_matrixutil_complex
 use blit_precision
@@ -55,7 +81,7 @@ end module blit_matrixutil_complex
 
 
 !==========================================================================
-! Regression test program
+!!Regression test program
 !==========================================================================
 
 #ifdef BLIT_SELF_TEST

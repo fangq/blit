@@ -1,6 +1,31 @@
+!!*************************************************************************
+!!
+!!  Blit - An open-source library for block iterative sparse linear solvers
+!!
+!!  Copyright 2011, Qianqian Fang <fangq at nmr.mgh.harvard.edu>
+!!
+!!  URL: http://blit.sourceforge.net
+!!
+!!  Project maintainer: 
+!!      Qianqian Fang, PhD
+!!      Martinos Center for Biomedical Imaging
+!!      Massachusetts General Hospital
+!!      Harvard Medical School
+!!      149 13th Street, Charlestown, MA 02129
+!!
+!!  License:
+!!      BSD or LGPL or GPL, see LICENSE_*.txt for more details
+!!
+!!*************************************************************************
+
 !==========================================================================
-! Sparse Matrix Utilities - for real sparse matrices
+!>\brief Sparse Matrix Utilities
 !==========================================================================
+
+!--------------------------------------------------------------------------
+!>\class blit_sparseutil_real
+!>\brief Sparse Matrix Utilities - for real sparse matrices
+!--------------------------------------------------------------------------
 
 module blit_sparseutil_real
 use blit_precision
@@ -19,9 +44,10 @@ contains
 
 end module blit_sparseutil_real
 
-!==========================================================================
-! Sparse Matrix Utilities - for complex sparse matrices
-!==========================================================================
+!--------------------------------------------------------------------------
+!>\class blit_sparseutil_complex
+!>\brief Sparse Matrix Utilities - for complex sparse matrices
+!--------------------------------------------------------------------------
 
 module blit_sparseutil_complex
 use blit_precision
@@ -41,7 +67,7 @@ contains
 end module blit_sparseutil_complex
 
 !==========================================================================
-! Regression test program
+!!Regression test program
 !==========================================================================
 
 #ifdef BLIT_SELF_TEST

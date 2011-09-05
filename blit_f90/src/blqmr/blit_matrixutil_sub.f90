@@ -1,7 +1,27 @@
+!!*************************************************************************
+!!
+!!  Blit - An open-source library for block iterative sparse linear solvers
+!!
+!!  Copyright 2011, Qianqian Fang <fangq at nmr.mgh.harvard.edu>
+!!
+!!  URL: http://blit.sourceforge.net
+!!
+!!  Project maintainer: 
+!!      Qianqian Fang, PhD
+!!      Martinos Center for Biomedical Imaging
+!!      Massachusetts General Hospital
+!!      Harvard Medical School
+!!      149 13th Street, Charlestown, MA 02129
+!!
+!!  License:
+!!      BSD or LGPL or GPL, see LICENSE_*.txt for more details
+!!
+!!*************************************************************************
 
-!=========================================================
-!  
-!=========================================================
+!--------------------------------------------------------------------------
+!> \fn IdentityMatrix(n,A)
+!> \brief generate an n-by-n identity matrix and write output to A
+!--------------------------------------------------------------------------
 
         subroutine IdentityMatrix(n,A)
         implicit none
@@ -13,9 +33,10 @@
 
         end subroutine IdentityMatrix
 
-!=========================================================
-!  
-!=========================================================
+!--------------------------------------------------------------------------
+!> \fn MatrixInversion(n,A)
+!> \brief compute the inversion of a square marix A and output to invA
+!--------------------------------------------------------------------------
 
         subroutine MatrixInversion(A, invA)
         implicit none
@@ -54,9 +75,10 @@
 
         end subroutine MatrixInversion
 
-!=========================================================
-!  
-!=========================================================
+!--------------------------------------------------------------------------
+!> \fn QRDecomposition(A, Q, R, iseconomic)
+!> \brief compute the QR decomposition of marix A
+!--------------------------------------------------------------------------
 
         subroutine QRDecomposition(A, Q, R, iseconomic)
         implicit none
@@ -111,9 +133,10 @@
 
         end subroutine QRDecomposition
 
-!=========================================================
-!  
-!=========================================================
+!--------------------------------------------------------------------------
+!> \fn QuasiQR(A, Q, R)
+!> \brief compute the quasi-QR decomposition of marix A
+!--------------------------------------------------------------------------
 
         subroutine QuasiQR(A, Q, R) ! economic form only
         implicit none
@@ -143,9 +166,10 @@
 
         end subroutine QuasiQR
 
-!=========================================================
-!  
-!=========================================================
+!--------------------------------------------------------------------------
+!> \fn PrintMatrix(A, info)
+!> \brief print the content of matrix A with clean formats
+!--------------------------------------------------------------------------
 
         subroutine PrintMatrix(A, info)
         implicit none

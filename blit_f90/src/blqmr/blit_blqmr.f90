@@ -1,6 +1,31 @@
+!!*************************************************************************
+!!
+!!  Blit - An open-source library for block iterative sparse linear solvers
+!!
+!!  Copyright 2011, Qianqian Fang <fangq at nmr.mgh.harvard.edu>
+!!
+!!  URL: http://blit.sourceforge.net
+!!
+!!  Project maintainer: 
+!!      Qianqian Fang, PhD
+!!      Martinos Center for Biomedical Imaging
+!!      Massachusetts General Hospital
+!!      Harvard Medical School
+!!      149 13th Street, Charlestown, MA 02129
+!!
+!!  License:
+!!      BSD or LGPL or GPL, see LICENSE_*.txt for more details
+!!
+!!*************************************************************************
+
 !==========================================================================
-! Block QMR Solver - for real systems
+!>\brief Module for Block Quasi-Minimal-Residual (BLQMR) algorithm
 !==========================================================================
+
+!--------------------------------------------------------------------------
+!>\class blit_blqmr_real
+!>\brief Block QMR Solver - for real systems
+!--------------------------------------------------------------------------
 
 #define MTYPEID_REAL    1
 #define MTYPEID_COMPLEX 2
@@ -38,9 +63,10 @@ contains
 
 end module blit_blqmr_real
 
-!==========================================================================
-! Block QMR Solver - for complex systems
-!==========================================================================
+!--------------------------------------------------------------------------
+!>\class blit_blqmr_complex
+!>\brief Block QMR Solver - for complex systems
+!--------------------------------------------------------------------------
 
 module blit_blqmr_complex
 
@@ -77,7 +103,7 @@ end module blit_blqmr_complex
 
 
 !==========================================================================
-! Regression test program
+!!Regression test program
 !==========================================================================
 
 #ifdef BLIT_SELF_TEST

@@ -1,7 +1,31 @@
+!!*************************************************************************
+!!
+!!  Blit - An open-source library for block iterative sparse linear solvers
+!!
+!!  Copyright 2011, Qianqian Fang <fangq at nmr.mgh.harvard.edu>
+!!
+!!  URL: http://blit.sourceforge.net
+!!
+!!  Project maintainer: 
+!!      Qianqian Fang, PhD
+!!      Martinos Center for Biomedical Imaging
+!!      Massachusetts General Hospital
+!!      Harvard Medical School
+!!      149 13th Street, Charlestown, MA 02129
+!!
+!!  License:
+!!      BSD or LGPL or GPL, see LICENSE_*.txt for more details
+!!
+!!*************************************************************************
+
 !==========================================================================
-! Incomplete LU decomposition preconditioner (using UMFPACK)
+!>\brief Incomplete LU decomposition preconditioner (using UMFPACK)
 !==========================================================================
 
+!--------------------------------------------------------------------------
+!>\class blit_ilupcond
+!>\brief module for incomplete LU decomposition of a sparse matrix (preconditioner)
+!--------------------------------------------------------------------------
 module blit_ilupcond
 use blit_precision
 implicit none
@@ -22,9 +46,10 @@ implicit none
 
 contains
 
-!=========================================================
-!  
-!=========================================================
+!--------------------------------------------------------------------------
+!> \fn ILUPcondCreate(this,n,nz)
+!> \brief initialization of the ILU preconditioner
+!--------------------------------------------------------------------------
 
         subroutine ILUPcondCreate(this,n,nz)
         implicit none
@@ -39,9 +64,10 @@ contains
 
         end subroutine ILUPcondCreate
 
-!=========================================================
-!  
-!=========================================================
+!--------------------------------------------------------------------------
+!> \fn ILUPcondDestroy(this)
+!> \brief destroy of the ILU preconditioner object
+!--------------------------------------------------------------------------
 
         subroutine ILUPcondDestroy(this)
         implicit none
@@ -59,9 +85,10 @@ contains
 
         end subroutine ILUPcondDestroy
 
-!=========================================================
-!  
-!=========================================================
+!--------------------------------------------------------------------------
+!> \fn ILUPcondPrep(this,Ap,Ai,Ax,droptol,Az)
+!> \brief precondition the sparse left-hand-side matrix
+!--------------------------------------------------------------------------
 
         subroutine ILUPcondPrep(this,Ap,Ai,Ax,droptol,Az)
         implicit none
@@ -110,9 +137,10 @@ contains
 
         end subroutine ILUPcondPrep
 
-!=========================================================
-!  
-!=========================================================
+!--------------------------------------------------------------------------
+!> \fn ILUPcondSolve(this,Ap,Ai,Ax,rows,cols,x,b,Az,xz,bz)
+!> \brief solving x in A*x=b using the preconditioned A matrix
+!--------------------------------------------------------------------------
 
         subroutine ILUPcondSolve(this,Ap,Ai,Ax,rows,cols,x,b,Az,xz,bz)
         implicit none
@@ -143,7 +171,7 @@ contains
 end module blit_ilupcond
 
 !==========================================================================
-! Regression test program
+!!Regression test program
 !==========================================================================
 
 #ifdef BLIT_SELF_TEST

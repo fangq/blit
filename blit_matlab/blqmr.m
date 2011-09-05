@@ -2,7 +2,7 @@ function [x,flag,relres,iter,resv]=blqmr(A,B,qtol,maxit,M1,M2,x0,varargin)
 %
 % [x,flag,relres,iter,resv] = blqmr(A,B,qtol,maxit,M1,M2,x0,opt)
 %
-%   Block Quasi-Minimum Residual (BL-QMR) iterative solver for sparse 
+%   Block Quasi-Minimal-Residual (BL-QMR) iterative solver for sparse 
 %   complex symmetric systems (suited for FEM modeling) in the form of
 %                  A*[x1, x2, ...] = [b1, b2, ...]
 %
@@ -62,7 +62,9 @@ function [x,flag,relres,iter,resv]=blqmr(A,B,qtol,maxit,M1,M2,x0,varargin)
 % 
 %  -- this file is part of Blit sparse solver library 
 %     URL: http://blit.sf.net
-%  License: BSD
+%
+%  License:
+%      BSD or LGPL or GPL, see License.txt for more details
 %
 
 %
