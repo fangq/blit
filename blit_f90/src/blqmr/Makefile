@@ -1,5 +1,13 @@
 ROOTDIR = ../../..
-BINARY=libblit.so
+
+BLITLIB_SUFFIX :=so
+BLITLIB_NAME   ?=libblit_gfortran
+
+ifeq ($(BUILD_STATIC),1)
+    BLITLIB_SUFFIX=a
+endif
+
+BINARY=$(BLITLIB_NAME).$(BLITLIB_SUFFIX)
 
 FILES= blit_const blit_matrixutil blit_sparseutil blit_ilupcond umf4_f77wrapper blit_blqmr
 

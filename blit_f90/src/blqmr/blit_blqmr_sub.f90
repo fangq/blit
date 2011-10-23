@@ -37,6 +37,14 @@
         this%dopcond=1
         this%isquasires=1
         this%debug=0
+        this%flag=-1
+        this%res=1e100_Kdouble
+        this%relres=1e100_Kdouble 
+
+        this%ilu%n=n
+        this%ilu%numeric=0
+        this%ilu%symbolic=0 
+        this%ilu%nz=0
 
         end subroutine BLQMROnCreate
 
@@ -67,8 +75,8 @@
         implicit none
 
         type(BLQMRSolver), intent(inout) :: this
-        integer :: nnz, Ap(this%n+1), Ai(nnz)
-        MTYPE(kind=Kdouble) :: Ax(nnz)
+        integer, intent(inout) :: nnz, Ap(this%n+1), Ai(nnz)
+        MTYPE(kind=Kdouble), intent(inout) :: Ax(nnz)
 
         if(this%dopcond > 0) then
                 call ILUPcondCreate(this%ilu,this%n,nnz)
@@ -91,27 +99,27 @@
 !> \brief solving a real or complex system using BLQMR algorithm
 !--------------------------------------------------------------------------
 
-        subroutine BLQMRSolve(this, Ap, Ai, Ax, nnz, x, b)
+        subroutine BLQMRSolve(this, Ap, Ai, Ax, nnz, x, b, nrhs)
         implicit none
 
         type(BLQMRSolver), intent(inout) :: this
-        integer :: i,k,m,t3,t3p,t3n,t3nn, Ap(:), Ai(:), nnz
+        integer :: i,k,m,t3,t3p,t3n,t3nn, Ap(this%n+1), nnz, Ai(nnz), nrhs
         integer, parameter :: DEBUG_RES=1
         real(kind=Kdouble) :: Qres, Qres1, Qres0
-        MTYPE(kind=Kdouble) :: Ax(:), b(:,:), x(:,:)
-        MTYPE(kind=Kdouble),dimension(size(b,2),size(b,2)) :: tmp0,tmp1,tmp2
-        MTYPE(kind=Kdouble),dimension(size(b,2)*2,size(b,2)) :: ZZ,zetafull
-        MTYPE(kind=Kdouble),dimension(size(b,2)*2,size(b,2)*2) :: QQ
-        MTYPE(kind=Kdouble),dimension(this%n,size(b,2)) :: tmp, omegat
-        MTYPE(kind=Kdouble),dimension(size(b,2),size(b,2))  :: alpha,theta,zeta,zetat,eta,tau,taut
-        MTYPE(kind=Kdouble),dimension(size(b,2),size(b,2),3):: beta,Qa,Qb,Qc,Qd,omega
-        MTYPE(kind=Kdouble),dimension(this%n,size(b,2))  :: vt
-        MTYPE(kind=Kdouble),dimension(this%n,size(b,2),3)  :: v,p
+        MTYPE(kind=Kdouble) :: Ax(nnz), b(this%n,nrhs), x(this%n,nrhs)
+        MTYPE(kind=Kdouble),dimension(nrhs,nrhs) :: tmp0,tmp1,tmp2
+        MTYPE(kind=Kdouble),dimension(nrhs*2,nrhs) :: ZZ,zetafull
+        MTYPE(kind=Kdouble),dimension(nrhs*2,nrhs*2) :: QQ
+        MTYPE(kind=Kdouble),dimension(this%n,nrhs) :: tmp, omegat
+        MTYPE(kind=Kdouble),dimension(nrhs,nrhs)  :: alpha,theta,zeta,zetat,eta,tau,taut
+        MTYPE(kind=Kdouble),dimension(nrhs,nrhs,3):: beta,Qa,Qb,Qc,Qd,omega
+        MTYPE(kind=Kdouble),dimension(this%n,nrhs)  :: vt
+        MTYPE(kind=Kdouble),dimension(this%n,nrhs,3)  :: v,p
 #if MTYPEID == MTYPEID_COMPLEX
-        real(kind=Kdouble),dimension(this%n,size(b,2),2) :: rtmp
+        real(kind=Kdouble),dimension(this%n,nrhs,2) :: rtmp
 #endif
 
-        this%nrhs=size(b,2)
+        this%nrhs=nrhs
         m=this%nrhs
 
         if(this%state==0) call BLQMRPrep(this, Ap, Ai, Ax, nnz)
@@ -284,3 +292,30 @@
         enddo
 
         end subroutine BLQMRSolve
+
+!--------------------------------------------------------------------------
+!> \fn BLQMRPrint(this)
+!> \brief print the internal variables inside a qmr solver structure
+!--------------------------------------------------------------------------
+
+        subroutine BLQMRPrint(this)
+        implicit none
+
+        type(BLQMRSolver), intent(in) :: this
+
+        write(*,'(A)') '{'
+        write(*,'(2A,I8,A)') char(9), '"n":', this%n, ','
+        write(*,'(2A,I8,A)') char(9), '"nrhs":', this%nrhs, ','
+        write(*,'(2A,E20.10E4,A)') char(9), '"qtol":', this%qtol, ','
+        write(*,'(2A,E20.10E4,A)') char(9), '"droptol":', this%droptol, ','
+        write(*,'(2A,I8,A)') char(9), '"maxit":', this%maxit, ','
+        write(*,'(2A,I4,A)') char(9), '"state":', this%state, ','
+        write(*,'(2A,I4,A)') char(9), '"dopcond":', this%dopcond, ','
+        write(*,'(2A,I4,A)') char(9), '"isquasires":', this%isquasires, ','
+        write(*,'(2A,E20.10E4,A)') char(9), '"res":', this%res, ','
+        write(*,'(2A,I4,A)') char(9), '"debug":', this%debug,','
+        write(*,'(2A,I4)') char(9), '"flag":', this%flag
+        write(*,'(A)') '}'
+  
+        end subroutine BLQMRPrint
+

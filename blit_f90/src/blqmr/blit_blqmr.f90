@@ -41,7 +41,7 @@ module blit_blqmr_real
 
         private
         public :: BLQMRSolver, BLQMRCreate, BLQMRDestroy, BLQMRPrep, &
-                  BLQMRSolve
+                  BLQMRSolve, BLQMRPrint
         interface BLQMRCreate; module procedure BLQMROnCreate; end interface
         interface BLQMRDestroy; module procedure BLQMROnDestroy; end interface
 
@@ -79,10 +79,9 @@ module blit_blqmr_complex
 
         private
         public :: BLQMRSolver, BLQMRCreate, BLQMRDestroy, BLQMRPrep, &
-                  BLQMRSolve
+                  BLQMRSolve, BLQMRPrint
         interface BLQMRCreate; module procedure BLQMROnCreate; end interface
         interface BLQMRDestroy; module procedure BLQMROnDestroy; end interface
-
 
         type BLQMRSolver
                 integer :: n, nrhs, maxit, state, dopcond, flag, iter, isquasires, debug
@@ -127,19 +126,19 @@ implicit none
        b(:,2)=(/18.0,  45.000,  -3.000,   3.000,  19.000/)
        x=0._Kdouble
 
-       qmr%maxit=1
+       qmr%maxit=100
        qmr%qtol=1e-5_Kdouble
        qmr%dopcond=1
-       qmr%droptol=0.001_Kdouble
+       qmr%droptol=0.0001_Kdouble
        qmr%isquasires=0
 
        call BLQMRPrep(qmr, Ap, Ai, Ax, nz)
-       call BLQMRSolve(qmr,Ap,Ai,Ax, nz, x, b)
+       call BLQMRSolve(qmr,Ap,Ai,Ax, nz, x, b,size(b,2))
 
        print *, qmr%iter, qmr%flag, qmr%res, qmr%relres
        write (*,'(F8.3)') x
 
-       call BLQMRSolve(qmr,Ap,Ai,Ax, nz, x(:,1:1), b(:,1:1))
+       call BLQMRSolve(qmr,Ap,Ai,Ax, nz, x(:,1:1), b(:,1:1),1)
 
        print *, qmr%iter, qmr%flag, qmr%res, qmr%relres
        write (*,'(F8.3)') x(:,1)

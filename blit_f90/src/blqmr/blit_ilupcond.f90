@@ -39,8 +39,6 @@ implicit none
         type ILUPcond
                 integer :: n, nz, status, iscomplex    ! Fortran-variables
                 integer :: numeric, symbolic ! UMFPACK-variables
-                !integer,dimension(:),allocatable             :: Ap,Ai
-                !real(kind=Kdouble),dimension(:), allocatable :: Ax,Az
                 real(kind=Kdouble),dimension(20)         :: control
         end type ILUPcond
 
