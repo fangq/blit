@@ -158,7 +158,7 @@
 #else
                 call ILUPcondSolve(this%ilu,Ap,Ai,real(Ax),this%n,this%nrhs,&
                         rtmp(:,:,1),real(tmp),aimag(Ax),rtmp(:,:,2),aimag(tmp))
-                vt=cmplx(rtmp(:,:,1),rtmp(:,:,2))
+                vt=cmplx(rtmp(:,:,1),rtmp(:,:,2), kind=Kdouble)
 #endif
                 if(isnan(real(sum(vt-vt)))) then
                         this%flag=2
@@ -205,7 +205,7 @@
 #else
                         call ILUPcondSolve(this%ilu,Ap,Ai,real(Ax),this%n,this%nrhs,rtmp(:,:,1),real(tmp),aimag(Ax),&
                               rtmp(:,:,2),aimag(tmp))
-                        vt=cmplx(rtmp(:,:,1),rtmp(:,:,2))
+                        vt=cmplx(rtmp(:,:,1),rtmp(:,:,2), kind=Kdouble)
 #endif
                         vt=vt-matmul(v(:,:,t3n),transpose(beta(:,:,t3)))
                 else
@@ -277,7 +277,7 @@
                 if(iand(this%debug,DEBUG_RES)>0) &
                     write(*,'(A,I4,A,E16.8,A,E16.8)') 'Iteration [',k,'] MaxResidual=', Qres, ', Relative=', Qres/Qres0
 
-                if(k>1 .and. Qres==Qres1) then
+                if(k>1 .and. abs(Qres-Qres1)<epsilon(Qres)) then
                      this%flag=3
                      exit
                 endif
