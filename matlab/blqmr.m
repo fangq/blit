@@ -6,11 +6,11 @@ function [x,flag,relres,iter,resv]=blqmr(A,B,qtol,maxit,M1,M2,x0,varargin)
 %   complex symmetric systems (suited for FEM modeling) in the form of
 %                  A*[x1, x2, ...] = [b1, b2, ...]
 %
-% Author: Qianqian Fang <fangq at nmr.mgh.harvard.edu>
+% Author: Qianqian Fang <q.fang at neu.edu>
 %
-% Address: 149 13th St, Charlestown, MA 02148
-%          Martinos Center for Biomedical Imaging
-%          Massachusetts General Hospital, Harvard Medical School
+% Address: 360 Huntington Ave, ISEC 206
+%          Boston, MA 02115, USA
+%          Dept. of Bioengineering, Northeastern University, USA
 %
 % Input:
 %      A: a full/sparse symmetric NxN matrix, can be either real or complex
@@ -56,6 +56,10 @@ function [x,flag,relres,iter,resv]=blqmr(A,B,qtol,maxit,M1,M2,x0,varargin)
 %      [x3,flag,res,iter,resv]=blqmr(A,b,1e-5,1000,R,R');
 %
 % Reference:
+%      Fang Q, Meaney PM, Geimer SD, Streltsov AV, Paulsen KD, "Microwave image 
+%      reconstruction from 3D fields coupled to 2D parameter estimation," IEEE 
+%      Transactions on Medical Imaging, vol. 23, pp. 475-484, Apr. 2004.
+%
 %      Boyse, W. E., Seidl, A. A. (1996) A block QMR method for computing 
 %      multiple simultaneous solutions to complex symmetric systems. 
 %      SIAM J. Sci. Comput. 17, 263–274.

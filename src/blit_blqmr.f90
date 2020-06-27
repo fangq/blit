@@ -2,16 +2,16 @@
 !!
 !!  Blit - An open-source library for block iterative sparse linear solvers
 !!
-!!  Copyright 2011, Qianqian Fang <fangq at nmr.mgh.harvard.edu>
+!!  Copyright 2011,2020 Qianqian Fang <q.fang at neu.edu>
 !!
 !!  URL: http://blit.sourceforge.net
 !!
 !!  Project maintainer: 
 !!      Qianqian Fang, PhD
-!!      Martinos Center for Biomedical Imaging
-!!      Massachusetts General Hospital
-!!      Harvard Medical School
-!!      149 13th Street, Charlestown, MA 02129
+!!      Dept. of Bioengineering
+!!      Northeastern University
+!!      360 Huntington Ave, ISEC 206
+!!      Boston, MA 02115, USA
 !!
 !!  License:
 !!      BSD or LGPL or GPL, see LICENSE_*.txt for more details

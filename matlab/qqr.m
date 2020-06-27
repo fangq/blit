@@ -5,11 +5,11 @@ function [q,r]=qqr(A,B)
 %   Quasi-QR decomposition of a general rectangular matrix using modified 
 %   Gram-Schmidt
 %
-% Author: Qianqian Fang <fangq at nmr.mgh.harvard.edu>
+% Author: Qianqian Fang <q.fang at neu.edu>
 %
-% Address: 149 13th St, Charlestown, MA 02148
-%          Martinos Center for Biomedical Imaging
-%          Massachusetts General Hospital, Harvard Medical School
+% Address: 360 Huntington Ave, ISEC 206
+%          Boston, MA 02115, USA
+%          Dept. of Bioengineering, Northeastern University, USA
 %
 % Input:
 %      A: a general N x M matrix, can be either real or complex

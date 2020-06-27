@@ -1,7 +1,7 @@
-ROOTDIR = ../../..
+ROOTDIR = ../
 
 BLITLIB_SUFFIX :=so
-BLITLIB_NAME   ?=libblit_gfortran
+BLITLIB_NAME   ?=libblqmr
 
 ifeq ($(BUILD_STATIC),1)
     BLITLIB_SUFFIX=a

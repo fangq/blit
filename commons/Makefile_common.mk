@@ -13,7 +13,7 @@
 ########################################################
 
 ifndef ROOTDIR
-	ROOTDIR  := .
+	ROOTDIR  := ..
 endif
 
 ifndef BLITDIR
@@ -24,7 +24,7 @@ BLITSRC :=$(BLITDIR)/src
 
 CXX        := g++
 AR         := $(CC)
-BIN        := bin
+BIN        := $(BLITDIR)/lib
 BUILT      := built
 BINDIR     := $(BIN)
 OBJDIR 	   := $(BUILT)
