@@ -32,6 +32,7 @@ CCFLAGS    += -c -Wall -g -fno-strict-aliasing #-mfpmath=sse -ffast-math -mtune=
 INCLUDEDIR := $(BLITDIR)/src -I/usr/include/suitesparse/
 EXTRALIB   += -lm
 AROUTPUT   += -o
+ARFLAGS    :=
 MAKE       := make
 
 F90        ?= gfortran
@@ -58,14 +59,29 @@ ifeq ($(CC),icc)
 	EXTRALIB :=
 endif
 
-ARFLAGS    := $(EXTRALIB)
-
 OBJSUFFIX  := .o
 BINSUFFIX  := 
 
 OBJS       := $(addprefix $(OBJDIR)/, $(FILES))
 OBJS       := $(subst $(OBJDIR)/$(BLITSRC)/,$(BLITSRC)/,$(OBJS))
 OBJS       := $(addsuffix $(OBJSUFFIX), $(OBJS))
+
+BLITLIB_SUFFIX=.so
+BINARY=$(BLITLIB_NAME)$(BLITLIB_SUFFIX)
+ARFLAGS := -shared -Wl,-soname,$(BINARY).1
+F90OPT     +=-fPIC
+CCFLAGS    +=-fPIC
+
+ifeq ($(MAKECMDGOALS),static)
+    BLITLIB_SUFFIX=.a
+    BINARY=$(BLITLIB_NAME)$(BLITLIB_SUFFIX)
+    AR         := ar
+    ARFLAGS    := r
+    AROUTPUT   :=
+    F90OPT     +=-fPIC
+    CCFLAGS    +=-fPIC
+    EXTRALIB    =
+endif
 
 TARGETSUFFIX:=$(suffix $(BINARY))
 
@@ -75,20 +91,9 @@ prof:      ARFLAGS+= -O3 -g -pg
 
 std:    F90OPT+=-std=f95 -fall-intrinsics
 
-ifeq ($(TARGETSUFFIX),.so)
-	CCFLAGS+= -fPIC 
-        F90OPT += -fPIC
-	ARFLAGS+= -shared -Wl,-soname,$(BINARY).1 
-endif
+all: lib
 
-ifeq ($(TARGETSUFFIX),.a)
-        CCFLAGS+=
-	AR         := ar
-        ARFLAGS    := r
-	AROUTPUT   :=
-endif
-
-all release prof icc std: $(SUBDIRS) $(BINDIR)/$(BINARY)
+release prof icc std static lib: $(SUBDIRS) $(BINDIR)/$(BINARY)
 
 $(SUBDIRS):
 	$(MAKE) -C $@ --no-print-directory
@@ -124,7 +129,7 @@ $(OBJDIR)/%$(OBJSUFFIX): %.c
 ##  Link  ##
 $(BINDIR)/$(BINARY): makedirs $(OBJS)
 	@$(ECHO) Building $@
-	$(AR)  $(ARFLAGS) $(AROUTPUT) $@ $(OBJS) $(USERARFLAGS)
+	$(AR)  $(ARFLAGS) $(AROUTPUT) $@ $(OBJS) $(EXTRALIB) $(USERARFLAGS)
 
 ##  Documentation  ##
 doc: makedocdir
@@ -138,9 +143,11 @@ g95bin:
 
 ## Clean
 clean:
-	-rm -rf $(OBJS) $(OBJDIR) $(BINDIR) #$(DOCDIR)
+	-rm -rf $(OBJS) $(OBJDIR) $(BINDIR)
 ifdef SUBDIRS
 	for i in $(SUBDIRS); do $(MAKE) --no-print-directory -C $$i clean; done
 endif
 
-.PHONY: regression clean arch makedirs dep $(SUBDIRS)
+.PHONY: all clean arch makedirs dep $(SUBDIRS)
+
+.DEFAULT_GOAL := lib
