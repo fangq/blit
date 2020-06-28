@@ -30,6 +30,7 @@
         integer :: n
 
         this%n=n
+        this%nrhs=1
         this%qtol=1e-6_Kdouble
         this%droptol=0.001_Kdouble
         this%maxit=this%n

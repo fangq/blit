@@ -27,6 +27,7 @@
 !>\brief module for incomplete LU decomposition of a sparse matrix (preconditioner)
 !--------------------------------------------------------------------------
 module blit_ilupcond
+use iso_c_binding, only: c_char,c_size_t,c_int,c_double
 use blit_precision
 implicit none
 
@@ -36,10 +37,10 @@ implicit none
 
         integer,parameter :: UMFP_DROPTOL = 19
 
-        type ILUPcond
-                integer :: n, nz, status, iscomplex    ! Fortran-variables
-                integer :: numeric, symbolic ! UMFPACK-variables
-                real(kind=Kdouble),dimension(20)         :: control
+        type, bind(c) :: ILUPcond
+                integer(c_int) :: n, nz, status, iscomplex    ! Fortran-variables
+                integer(c_int) :: numeric, symbolic ! UMFPACK-variables
+                real(c_double),dimension(20)         :: control
         end type ILUPcond
 
 contains

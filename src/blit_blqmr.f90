@@ -31,7 +31,7 @@
 #define MTYPEID_COMPLEX 2
 
 module blit_blqmr_real
-
+        use iso_c_binding, only: c_char,c_size_t,c_int,c_double
         use blit_precision
         use blit_ilupcond
         use blit_sparseutil_real
@@ -45,9 +45,9 @@ module blit_blqmr_real
         interface BLQMRCreate; module procedure BLQMROnCreate; end interface
         interface BLQMRDestroy; module procedure BLQMROnDestroy; end interface
 
-        type BLQMRSolver
-                integer :: n, nrhs, maxit, state, dopcond, flag, iter, isquasires, debug
-                real(kind=Kdouble) :: qtol, droptol, res, relres ! convergence tolerance
+        type, bind(c) :: BLQMRSolver
+                integer(c_int) :: n, nrhs, maxit, state, dopcond, flag, iter, isquasires, debug
+                real(c_double) :: qtol, droptol, res, relres ! convergence tolerance
                 type (ILUPcond) :: ilu ! private ILU preconditioner
         end type BLQMRSolver
 save
