@@ -4,9 +4,9 @@ BINDIR=bin
 MKDIR =mkdir
 CC   ?=gcc
 CXX  ?=g++
-INCLUDEDIR=../include
-LINKDIR=../../blit_f90/src/blqmr/bin/
-LINKLIB=-lblit_gfortran -lumfpack -llapack
+INCLUDEDIR=../../include
+LINKDIR=../../lib
+LINKLIB=-lblit -lumfpack -llapack -lm -lgfortran
 CCFLAGS=-g
 ECHO=echo
 
