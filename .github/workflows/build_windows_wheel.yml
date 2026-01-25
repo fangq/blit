@@ -18,7 +18,7 @@ jobs:
         shell: bash
     strategy:
       matrix:
-        python_version: ['3.6', '3.7', '3.8', '3.9', '3.10', '3.11', '3.12', '3.13']
+        python_version: [ '3.6', '3.7', '3.8', '3.9', '3.10', '3.11', '3.12', 'pypy3.7', 'pypy3.8', 'pypy3.9', 'pypy3.10' ]
     outputs:
       perform_pypi_upload: ${{ steps.perform_pypi_upload_check.outputs.perform_pypi_upload }}
     steps:
@@ -39,7 +39,7 @@ jobs:
       - name: Install dependencies
         shell: bash -l {0}
         run: |
-          conda install -y suitesparse lapack blas m2w64-gcc-fortran numpy
+          conda install -y suitesparse lapack blas m2w64-gcc-fortran "numpy<2.0"
       - name: Build Wheels
         shell: bash -l {0}
         env:
@@ -47,7 +47,7 @@ jobs:
           UMFPACK_LIB: "$CONDA_PREFIX/Library/lib"
         run: |
           cd python/
-          pip install wheel setuptools
+          pip install "wheel" "setuptools" "numpy<2.0"
           python setup.py bdist_wheel
           ls dist/
           mv dist/ ../
