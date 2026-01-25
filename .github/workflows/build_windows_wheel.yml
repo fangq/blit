@@ -42,18 +42,31 @@ jobs:
             mingw-w64-x86_64-pkg-config
       - name: Put MSYS2_MinGW64 on PATH
         run: echo "D:/a/_temp/msys64/mingw64/bin" >> $GITHUB_PATH
-      - name: Build Wheels (Python < 3.12, numpy.distutils)
+      - name: Build Wheels (Python < 3.12, numpy.distutils with MinGW)
         if: ${{ matrix.python_version == '3.9' || matrix.python_version == '3.10' || matrix.python_version == '3.11' }}
         env:
           UMFPACK_INCLUDE: "D:/a/_temp/msys64/mingw64/include/suitesparse;D:/a/_temp/msys64/mingw64/include"
           UMFPACK_LIB: "D:/a/_temp/msys64/mingw64/lib"
-          FC: gfortran
-          F77: gfortran
-          F90: gfortran
         run: |
           cd python/
           pip install wheel setuptools "numpy>=1.20,<2.0" scipy
-          python setup.py bdist_wheel
+          # Create distutils config to force MinGW compiler
+          mkdir -p $HOME
+          cat > $HOME/pydistutils.cfg << 'EOF'
+          [build]
+          compiler=mingw32
+          [build_ext]
+          compiler=mingw32
+          EOF
+          # Also create setup.cfg in the project
+          cat > setup.cfg << 'EOF'
+          [build]
+          compiler=mingw32
+          [build_ext]
+          compiler=mingw32
+          EOF
+          # Build with explicit compiler specification
+          python setup.py build_ext --compiler=mingw32 --fcompiler=gnu95 bdist_wheel
           ls dist/
           mv dist/ ../
           cd ../
@@ -63,9 +76,8 @@ jobs:
           UMFPACK_INCLUDE: "D:/a/_temp/msys64/mingw64/include/suitesparse;D:/a/_temp/msys64/mingw64/include"
           UMFPACK_LIB: "D:/a/_temp/msys64/mingw64/lib"
           FC: gfortran
-          F77: gfortran
-          F90: gfortran
           CC: gcc
+          CXX: g++
           PKG_CONFIG_PATH: "D:/a/_temp/msys64/mingw64/lib/pkgconfig"
         run: |
           cd python/
