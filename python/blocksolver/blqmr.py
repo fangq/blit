@@ -448,7 +448,7 @@ def _blqmr_python_impl(
     dtype = np.complex128 if is_complex_input else np.float64
 
     if maxiter is None:
-        maxiter = min(n, 20)
+        maxiter = min(n, 100)
 
     if (
         workspace is None
@@ -739,7 +739,10 @@ def _blqmr_solve_native_csc(
         try:
             M1 = make_preconditioner(A, "ilu")
         except Exception:
-            M1 = make_preconditioner(A, "diag")
+            try:
+                M1 = make_preconditioner(A_sp, 'diag')
+            except Exception:
+                M1 = None  # Fall back to no preconditioning
 
     x, flag, relres, niter, resv = _blqmr_python_impl(
         A, b, tol=tol, maxiter=maxiter, M1=M1, x0=x0
@@ -846,7 +849,10 @@ def _blqmr_solve_multi_native(
         try:
             M1 = make_preconditioner(A, "ilu")
         except Exception:
-            M1 = make_preconditioner(A, "diag")
+            try:
+                M1 = make_preconditioner(A_sp, 'diag')
+            except Exception:
+                M1 = None  # Fall back to no preconditioning
 
     if B.ndim == 1:
         B = B.reshape(-1, 1)
@@ -1042,7 +1048,10 @@ def _blqmr_native(
         try:
             M1 = make_preconditioner(A_sp, "ilu")
         except Exception:
-            M1 = make_preconditioner(A_sp, "diag")
+            try:
+                M1 = make_preconditioner(A_sp, 'diag')
+            except Exception:
+                M1 = None  # Fall back to no preconditioning
 
     x, flag, relres, niter, resv = _blqmr_python_impl(
         A,
