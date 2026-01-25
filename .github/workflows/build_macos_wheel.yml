@@ -16,7 +16,7 @@ jobs:
     strategy:
       matrix:
         os: [macos-15-intel, macos-14]
-        python_version: ['3.6', '3.7', '3.8', '3.9', '3.10', '3.11', '3.12', '3.13']
+        python_version: ['3.10', '3.11', '3.12', '3.13']
         exclude:
           - os: macos-14
             python_version: 3.6
@@ -51,7 +51,7 @@ jobs:
           which gfortran || which gfortran-${GCC_VERSION}
           gfortran --version || gfortran-${GCC_VERSION} --version
       - name: Build Wheels (Python < 3.12, numpy.distutils)
-        if: ${{ matrix.python_version == '3.9' || matrix.python_version == '3.10' || matrix.python_version == '3.11' }}
+        if: ${{ matrix.python_version == '3.10' || matrix.python_version == '3.11' }}
         env:
           LDFLAGS: "-L/opt/homebrew/lib -L/usr/local/lib -L/opt/homebrew/opt/openblas/lib -L/usr/local/opt/openblas/lib"
           CPPFLAGS: "-I/opt/homebrew/include -I/usr/local/include"
