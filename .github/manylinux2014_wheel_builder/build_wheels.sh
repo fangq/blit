@@ -30,7 +30,7 @@ for PYBIN in /opt/python/cp3{9,10,11,12,13}*/bin/; do
         # Build wheel using meson-python (respects pyproject.toml)
         echo "Using meson-python build system"
         "${PYBIN}/python" -m build --wheel --outdir wheels/
-        python -m unittest discover -v tests
+        "${PYBIN}/python" -m unittest discover -v tests
     fi
 done
 
