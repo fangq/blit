@@ -8,7 +8,7 @@
 #   pip install -e . --no-build-isolation
 
 project('blit', ['c', 'fortran'],
-  version: '1.0.0',
+  version: '0.8.0',
   license: 'BSD-3-Clause OR LGPL-3.0-or-later',
   meson_version: '>=0.64.0',
   default_options: ['buildtype=release']
