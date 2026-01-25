@@ -42,36 +42,36 @@ jobs:
             mingw-w64-x86_64-pkg-config
       - name: Put MSYS2_MinGW64 on PATH
         run: echo "D:/a/_temp/msys64/mingw64/bin" >> $GITHUB_PATH
-      - name: Build Wheels (Python < 3.12, numpy.distutils with MinGW)
-        if: ${{ matrix.python_version == '3.9' || matrix.python_version == '3.10' || matrix.python_version == '3.11' }}
-        env:
-          UMFPACK_INCLUDE: "D:/a/_temp/msys64/mingw64/include/suitesparse;D:/a/_temp/msys64/mingw64/include"
-          UMFPACK_LIB: "D:/a/_temp/msys64/mingw64/lib"
+      - name: Create Python import library for MinGW
+        shell: pwsh
         run: |
-          cd python/
-          pip install wheel setuptools "numpy>=1.20,<2.0" scipy
-          # Create distutils config to force MinGW compiler
-          mkdir -p $HOME
-          cat > $HOME/pydistutils.cfg << 'EOF'
-          [build]
-          compiler=mingw32
-          [build_ext]
-          compiler=mingw32
-          EOF
-          # Also create setup.cfg in the project
-          cat > setup.cfg << 'EOF'
-          [build]
-          compiler=mingw32
-          [build_ext]
-          compiler=mingw32
-          EOF
-          # Build with explicit compiler specification
-          python setup.py build_ext --compiler=mingw32 --fcompiler=gnu95 bdist_wheel
-          ls dist/
-          mv dist/ ../
-          cd ../
-      - name: Build Wheels (Python >= 3.12, meson)
-        if: ${{ matrix.python_version == '3.12' || matrix.python_version == '3.13' }}
+          # Get Python paths
+          $pythonDir = Split-Path (Get-Command python).Source
+          $pythonVersion = python -c "import sys; print(f'{sys.version_info.major}{sys.version_info.minor}')"
+          $pythonDll = "python${pythonVersion}.dll"
+          $pythonLib = "libpython${pythonVersion}.a"
+          
+          # Find the DLL
+          $dllPath = Join-Path $pythonDir $pythonDll
+          if (-not (Test-Path $dllPath)) {
+            $dllPath = "C:\Windows\System32\$pythonDll"
+          }
+          
+          Write-Host "Python DLL: $dllPath"
+          Write-Host "Creating import library: $pythonLib"
+          
+          # Create .def file from DLL exports
+          $defFile = "python${pythonVersion}.def"
+          & "D:\a\_temp\msys64\mingw64\bin\gendef.exe" $dllPath
+          
+          # Create import library
+          & "D:\a\_temp\msys64\mingw64\bin\dlltool.exe" --dllname $pythonDll --def $defFile --output-lib $pythonLib
+          
+          # Copy to Python libs directory
+          $libsDir = Join-Path $pythonDir "libs"
+          Copy-Item $pythonLib $libsDir -Force
+          Write-Host "Copied $pythonLib to $libsDir"
+      - name: Build Wheels with Meson
         env:
           UMFPACK_INCLUDE: "D:/a/_temp/msys64/mingw64/include/suitesparse;D:/a/_temp/msys64/mingw64/include"
           UMFPACK_LIB: "D:/a/_temp/msys64/mingw64/lib"
