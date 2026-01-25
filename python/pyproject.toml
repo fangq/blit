@@ -1,0 +1,45 @@
+[build-system]
+requires = [
+    "numpy>=1.16,<2.0",
+    "setuptools>=45",
+    "wheel",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "blit"
+version = "1.0.0"
+description = "Block Quasi-Minimal-Residual sparse linear solver"
+readme = "README.md"
+license = {text = "BSD-3-Clause OR LGPL-3.0-or-later OR GPL-3.0-or-later"}
+authors = [
+    {name = "Qianqian Fang", email = "q.fang@neu.edu"},
+]
+keywords = ["sparse", "linear-algebra", "iterative-solver", "qmr", "fortran"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Fortran",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+requires-python = ">=3.8"
+dependencies = ["numpy>=1.16"]
+
+[project.optional-dependencies]
+scipy = ["scipy>=1.0"]
+test = ["pytest>=6.0", "scipy>=1.0"]
+dev = ["pytest>=6.0", "scipy>=1.0", "build", "twine"]
+
+[project.urls]
+Homepage = "http://blit.sourceforge.net"
+Repository = "https://github.com/fangq/blit"
+
+[tool.setuptools]
+packages = ["blit"]

@@ -1,0 +1,71 @@
+!    -*- f90 -*-
+! F2PY signature file for BLIT BLQMR solver
+!
+! This file explicitly defines what f2py should wrap.
+
+python module _blqmr
+    interface
+
+        subroutine blqmr_solve_real(n, nnz, Ap, Ai, Ax, b, x, &
+                                    maxit, qtol, droptol, dopcond, &
+                                    flag, iter, relres)
+            ! Solve sparse real system Ax = b
+            integer, intent(in) :: n
+            integer, intent(in) :: nnz
+            integer, intent(in), dimension(n+1), depend(n) :: Ap
+            integer, intent(in), dimension(nnz), depend(nnz) :: Ai
+            real*8, intent(in), dimension(nnz), depend(nnz) :: Ax
+            real*8, intent(in), dimension(n), depend(n) :: b
+            real*8, intent(out), dimension(n), depend(n) :: x
+            integer, intent(in) :: maxit
+            real*8, intent(in) :: qtol
+            real*8, intent(in) :: droptol
+            integer, intent(in) :: dopcond
+            integer, intent(out) :: flag
+            integer, intent(out) :: iter
+            real*8, intent(out) :: relres
+        end subroutine blqmr_solve_real
+
+        subroutine blqmr_solve_real_multi(n, nnz, nrhs, Ap, Ai, Ax, B, X, &
+                                          maxit, qtol, droptol, dopcond, &
+                                          flag, iter, relres)
+            ! Solve sparse real system AX = B with multiple RHS
+            integer, intent(in) :: n
+            integer, intent(in) :: nnz
+            integer, intent(in) :: nrhs
+            integer, intent(in), dimension(n+1), depend(n) :: Ap
+            integer, intent(in), dimension(nnz), depend(nnz) :: Ai
+            real*8, intent(in), dimension(nnz), depend(nnz) :: Ax
+            real*8, intent(in), dimension(n, nrhs), depend(n, nrhs) :: B
+            real*8, intent(out), dimension(n, nrhs), depend(n, nrhs) :: X
+            integer, intent(in) :: maxit
+            real*8, intent(in) :: qtol
+            real*8, intent(in) :: droptol
+            integer, intent(in) :: dopcond
+            integer, intent(out) :: flag
+            integer, intent(out) :: iter
+            real*8, intent(out) :: relres
+        end subroutine blqmr_solve_real_multi
+
+        subroutine blqmr_solve_complex(n, nnz, Ap, Ai, Ax, b, x, &
+                                       maxit, qtol, droptol, dopcond, &
+                                       flag, iter, relres)
+            ! Solve sparse complex system Ax = b
+            integer, intent(in) :: n
+            integer, intent(in) :: nnz
+            integer, intent(in), dimension(n+1), depend(n) :: Ap
+            integer, intent(in), dimension(nnz), depend(nnz) :: Ai
+            complex*16, intent(in), dimension(nnz), depend(nnz) :: Ax
+            complex*16, intent(in), dimension(n), depend(n) :: b
+            complex*16, intent(out), dimension(n), depend(n) :: x
+            integer, intent(in) :: maxit
+            real*8, intent(in) :: qtol
+            real*8, intent(in) :: droptol
+            integer, intent(in) :: dopcond
+            integer, intent(out) :: flag
+            integer, intent(out) :: iter
+            real*8, intent(out) :: relres
+        end subroutine blqmr_solve_complex
+
+    end interface
+end python module _blqmr
