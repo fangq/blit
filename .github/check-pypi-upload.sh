@@ -1,6 +1,6 @@
 #!/bin/bash
 BLIT_BUILD_VERSION=$(awk -F"-" '{ print $2 }' <<< $(ls dist/ | head -1))
-BLIT_VERSIONS_STRING=$(pip index versions blit | grep versions:)
+BLIT_VERSIONS_STRING=$(pip index versions blocksolver | grep versions:)
 BLIT_VERSIONS_STRING=${BLIT_VERSIONS_STRING#*:}
 UPLOAD_TO_PYPI=1
 while IFS=', ' read -ra BLIT_VERSIONS_ARRAY; do
