@@ -1,0 +1,82 @@
+name: Build+Upload Windows Python Wheels
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - '*'
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build_windows_wheels:
+    name: Build Windows wheels
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      matrix:
+        python_version: ['3.6', '3.7', '3.8', '3.9', '3.10', '3.11', '3.12', '3.13']
+    outputs:
+      perform_pypi_upload: ${{ steps.perform_pypi_upload_check.outputs.perform_pypi_upload }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python_version }}
+      - name: Setup Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-update-conda: true
+          python-version: ${{ matrix.python_version }}
+          channels: conda-forge
+      - name: Install dependencies
+        shell: bash -l {0}
+        run: |
+          conda install -y suitesparse lapack blas m2w64-gcc-fortran numpy
+      - name: Build Wheels
+        shell: bash -l {0}
+        env:
+          UMFPACK_INCLUDE: "$CONDA_PREFIX/Library/include/suitesparse;$CONDA_PREFIX/Library/include"
+          UMFPACK_LIB: "$CONDA_PREFIX/Library/lib"
+        run: |
+          cd python/
+          pip install wheel setuptools
+          python setup.py bdist_wheel
+          ls dist/
+          mv dist/ ../
+          cd ../
+      - name: Check If the Build Version Exists on PyPI
+        id: perform_pypi_upload_check
+        run: |
+          ./.github/check-pypi-upload.sh
+      - name: Prepare Wheels for Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-wheels-${{ matrix.python_version }}
+          path: dist/
+
+  upload_windows_wheels:
+    needs: build_windows_wheels
+    runs-on: ubuntu-latest
+    if: ${{ github.repository_owner == 'fangq' && needs.build_windows_wheels.outputs.perform_pypi_upload == 1 && github.event_name != 'pull_request'}}
+    steps:
+      - name: Download Wheels from Build Job
+        uses: actions/download-artifact@v4
+        with:
+          pattern: windows-wheels-*
+          merge-multiple: true
+          path: dist/
+      - name: Upload packages to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          verify_metadata: false
+          verbose: true
+          skip_existing: true
