@@ -25,7 +25,7 @@ for PYBIN in /opt/python/cp3{9,10,11,12,13}*/bin/; do
         rm -rf build/ *.egg-info/ dist/ builddir/
         
         # Install build dependencies
-        "${PYBIN}/pip" install build meson-python meson ninja numpy
+        "${PYBIN}/pip" install build meson-python meson ninja numpy scipy
         
         # Build wheel using meson-python (respects pyproject.toml)
         echo "Using meson-python build system"
