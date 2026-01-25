@@ -114,7 +114,7 @@ def get_extension():
         raise FileNotFoundError(f"Missing source files: {missing}")
 
     return Extension(
-        name="blit._blqmr",
+        name="blocksolver._blqmr",
         sources=sources,
         include_dirs=include_dirs,
         library_dirs=library_dirs,
@@ -128,14 +128,14 @@ def get_extension():
 def run_setup_with_extension():
     """Run setup with Fortran extension."""
     setup(
-        name="blit",
+        name="blocksolver",
         version="0.8.0",
         description="Block Quasi-Minimal-Residual sparse linear solver",
         author="Qianqian Fang",
         author_email="q.fang@neu.edu",
-        url="http://blit.sourceforge.net",
+        url="https://blit.sourceforge.net",
         license="BSD/LGPL/GPL",
-        packages=["blit"],
+        packages=["blocksolver"],
         ext_modules=[get_extension()],
         python_requires=">=3.8",
         install_requires=[
@@ -152,14 +152,14 @@ def run_setup_with_extension():
 def run_setup_without_extension():
     """Run setup without Fortran extension (pure Python fallback)."""
     setup(
-        name="blit",
+        name="blocksolver",
         version="0.8.0",
         description="Block Quasi-Minimal-Residual sparse linear solver",
         author="Qianqian Fang",
         author_email="q.fang@neu.edu",
-        url="http://blit.sourceforge.net",
+        url="https://blit.sourceforge.net",
         license="BSD/LGPL/GPL",
-        packages=["blit"],
+        packages=["blocksolver"],
         python_requires=">=3.8",
         install_requires=[
             "numpy>=1.16",

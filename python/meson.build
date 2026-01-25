@@ -7,7 +7,7 @@
 #   # or for development
 #   pip install -e . --no-build-isolation
 
-project('blit', ['c', 'fortran'],
+project('blocksolver', ['c', 'fortran'],
   version: '0.8.0',
   license: 'BSD-3-Clause OR LGPL-3.0-or-later',
   meson_version: '>=0.64.0',
@@ -229,12 +229,12 @@ py.extension_module('_blqmr',
   fortran_args: fortran_args,
   c_args: c_args,
   install: true,
-  subdir: 'blit',
+  subdir: 'blocksolver',
 )
 
 # Install Python files
 py.install_sources(
-  'blit/__init__.py',
-  'blit/blqmr.py',
-  subdir: 'blit',
+  'blocksolver/__init__.py',
+  'blocksolver/blqmr.py',
+  subdir: 'blocksolver',
 )

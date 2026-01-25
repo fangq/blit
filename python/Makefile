@@ -54,7 +54,7 @@ build-direct: $(SIGNATURE)
 		--f90flags="$(FFLAGS)" \
 		-I$(UMFPACK_INC) -L$(UMFPACK_LIB) $(LIBS) \
 		$(FORTRAN_SRC) $(C_SRC)
-	mv $(MODULE)*.so blit/
+	mv $(MODULE)*.so blocksolver/
 	@echo "Build complete!"
 
 # Install
@@ -72,7 +72,7 @@ wheel:
 
 # Test
 test: build
-	$(PYTHON) -c "import blit; blit.test()"
+	$(PYTHON) -c "import blocksolver; blocksolver.test()"
 
 # Pytest
 pytest: build
@@ -81,8 +81,8 @@ pytest: build
 # Clean
 clean:
 	rm -rf build/ dist/ *.egg-info/ .eggs/
-	rm -f blit/*.so blit/*.pyd
-	rm -rf blit/__pycache__ __pycache__ tests/__pycache__
+	rm -f blocksolver/*.so blocksolver/*.pyd
+	rm -rf blocksolver/__pycache__ __pycache__ tests/__pycache__
 	rm -rf .pytest_cache/
 
 # Help

@@ -40,7 +40,7 @@ pip install -e .
 
 ```python
 import numpy as np
-from blit import blqmr_solve
+from blocksolver import blqmr_solve
 
 # Define sparse matrix in CSC format (0-based indexing)
 Ap = np.array([0, 2, 5, 9, 10, 12], dtype=np.int32)
@@ -60,7 +60,7 @@ print(f"Iterations: {result.iter}")
 
 ```python
 from scipy.sparse import csc_matrix
-from blit import blqmr_scipy
+from blocksolver import blqmr_scipy
 
 A = csc_matrix([[4, 1, 0], [1, 3, 1], [0, 1, 2]])
 b = np.array([1., 2., 3.])
@@ -71,7 +71,7 @@ x, flag = blqmr_scipy(A, b, tol=1e-10)
 ### Multiple Right-Hand Sides
 
 ```python
-from blit import blqmr_solve_multi
+from blocksolver import blqmr_solve_multi
 
 B = np.column_stack([b1, b2, b3])  # n x nrhs
 result = blqmr_solve_multi(Ap, Ai, Ax, B)

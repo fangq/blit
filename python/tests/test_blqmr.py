@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from blit import blqmr_solve, blqmr_solve_multi, BLQMRResult
+from blocksolver import blqmr_solve, blqmr_solve_multi, BLQMRResult
 
 
 # Test matrix from Fortran test program
@@ -131,7 +131,7 @@ class TestSciPyInterface:
         """Test SciPy-style interface."""
         pytest.importorskip("scipy")
         from scipy.sparse import csc_matrix
-        from blit import blqmr_scipy
+        from blocksolver import blqmr_scipy
 
         d = test_system
         A = csc_matrix(dense_matrix)

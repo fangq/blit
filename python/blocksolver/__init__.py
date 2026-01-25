@@ -6,21 +6,21 @@ Falls back to pure-Python implementation when Fortran extension is unavailable.
 
 Examples
 --------
->>> from blit import blqmr_solve
+>>> from blocksolver import blqmr_solve
 >>> result = blqmr_solve(Ap, Ai, Ax, b)
 >>> print(result.x, result.converged)
 
 >>> # With scipy sparse matrices:
->>> from blit import blqmr_scipy
+>>> from blocksolver import blqmr_scipy
 >>> x, flag = blqmr_scipy(A, b)
 
 >>> # Direct block QMR with custom preconditioner:
->>> from blit import blqmr, make_preconditioner
+>>> from blocksolver import blqmr, make_preconditioner
 >>> M1 = make_preconditioner(A, 'ilu')
 >>> x, flag, relres, niter, resv = blqmr(A, b, M1=M1)
 
 >>> # Check which backend is being used:
->>> from blit import BLQMR_EXT
+>>> from blocksolver import BLQMR_EXT
 >>> print("Using Fortran" if BLQMR_EXT else "Using pure Python")
 """
 

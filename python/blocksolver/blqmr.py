@@ -34,7 +34,7 @@ BLQMR_EXT = False
 _blqmr = None
 
 try:
-    from blit import _blqmr
+    from blocksolver import _blqmr
 
     BLQMR_EXT = True
 except ImportError:

@@ -8,7 +8,7 @@ requires = [
 build-backend = "mesonpy"
 
 [project]
-name = "blit"
+name = "blocksolver"
 version = "0.8.0"
 description = "Block Quasi-Minimal-Residual sparse linear solver"
 readme = "README.md"
@@ -49,10 +49,10 @@ test = ["pytest>=6.0"]
 dev = ["pytest>=6.0", "build", "twine"]
 
 [project.urls]
-Homepage = "http://blit.sourceforge.net"
-Repository = "https://github.com/fangq/blit"
-Documentation = "http://blit.sourceforge.net"
-"Bug Tracker" = "https://github.com/fangq/blit/issues"
+Homepage = "https://blit.sourceforge.net"
+Repository = "https://github.com/fangq/blocksolver"
+Documentation = "https://blit.sourceforge.net"
+"Bug Tracker" = "https://github.com/fangq/blocksolver/issues"
 
 [tool.meson-python.args]
 install = ['--skip-subprojects']
@@ -60,7 +60,7 @@ install = ['--skip-subprojects']
 [tool.cibuildwheel]
 build = "cp39-* cp310-* cp311-* cp312-* cp313-*"
 skip = "*-musllinux* pp*"
-test-command = "python -c \"import blit; blit.test()\""
+test-command = "python -c \"import blocksolver; blocksolver.test()\""
 
 [tool.cibuildwheel.linux]
 archs = ["x86_64", "aarch64"]
