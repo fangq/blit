@@ -7,7 +7,7 @@ RUN yum install -y epel-release && \
         lapack-devel \
         blas-devel \
         openblas-devel \
-        pkg-config \
+        pkgconfig \
     && yum clean all
 
 # Set environment variables for library discovery
