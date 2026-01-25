@@ -23,15 +23,16 @@ except ImportError:
 @dataclass
 class BLQMRResult:
     """Result container for BLQMR solver."""
+
     x: np.ndarray
     flag: int
     iter: int
     relres: float
-    
+
     @property
     def converged(self) -> bool:
         return self.flag == 0
-    
+
     def __repr__(self) -> str:
         status = "converged" if self.converged else f"flag={self.flag}"
         return f"BLQMRResult({status}, iter={self.iter}, relres={self.relres:.2e})"
@@ -39,7 +40,7 @@ class BLQMRResult:
 
 def blqmr_solve(
     Ap: np.ndarray,
-    Ai: np.ndarray, 
+    Ai: np.ndarray,
     Ax: np.ndarray,
     b: np.ndarray,
     *,
@@ -52,7 +53,7 @@ def blqmr_solve(
 ) -> BLQMRResult:
     """
     Solve sparse linear system Ax = b using Block QMR algorithm.
-    
+
     Parameters
     ----------
     Ap : ndarray of int32
@@ -76,7 +77,7 @@ def blqmr_solve(
     zero_based : bool, default True
         If True, Ap and Ai use 0-based indexing (Python/C convention).
         If False, uses 1-based indexing (Fortran convention).
-    
+
     Returns
     -------
     BLQMRResult
@@ -85,37 +86,38 @@ def blqmr_solve(
     # Get dimensions
     n = len(Ap) - 1
     nnz = len(Ax)
-    
+
     # Convert to Fortran-compatible types and ensure contiguous arrays
     # Use Fortran ordering for arrays passed to Fortran
     Ap = np.asfortranarray(Ap, dtype=np.int32)
     Ai = np.asfortranarray(Ai, dtype=np.int32)
     Ax = np.asfortranarray(Ax, dtype=np.float64)
     b = np.asfortranarray(b, dtype=np.float64)
-    
+
     # Validation
     if len(Ai) != nnz:
         raise ValueError(f"Ai length ({len(Ai)}) must match Ax length ({nnz})")
     if len(b) != n:
         raise ValueError(f"b length ({len(b)}) must match matrix size ({n})")
-    
+
     # Convert to 1-based indexing if needed (Fortran convention)
     if zero_based:
         Ap = Ap + 1
         Ai = Ai + 1
-    
+
     if maxiter is None:
         maxiter = n
     dopcond = 1 if use_precond else 0
-    
+
     # Call Fortran solver via f2py
     # Note: f2py expects arguments in exact order matching the .pyf signature
     x, flag, niter, relres = _blqmr.blqmr_solve_real(
-        n, nnz, Ap, Ai, Ax, b,
-        maxiter, tol, droptol, dopcond
+        n, nnz, Ap, Ai, Ax, b, maxiter, tol, droptol, dopcond
     )
-    
-    return BLQMRResult(x=x.copy(), flag=int(flag), iter=int(niter), relres=float(relres))
+
+    return BLQMRResult(
+        x=x.copy(), flag=int(flag), iter=int(niter), relres=float(relres)
+    )
 
 
 def blqmr_solve_multi(
@@ -135,30 +137,31 @@ def blqmr_solve_multi(
     """
     n = len(Ap) - 1
     nnz = len(Ax)
-    
+
     Ap = np.asfortranarray(Ap, dtype=np.int32)
     Ai = np.asfortranarray(Ai, dtype=np.int32)
     Ax = np.asfortranarray(Ax, dtype=np.float64)
     B = np.asfortranarray(B, dtype=np.float64)
-    
+
     if B.ndim == 1:
-        B = B.reshape(-1, 1, order='F')
+        B = B.reshape(-1, 1, order="F")
     nrhs = B.shape[1]
-    
+
     if zero_based:
         Ap = Ap + 1
         Ai = Ai + 1
-    
+
     if maxiter is None:
         maxiter = n
     dopcond = 1 if use_precond else 0
-    
+
     X, flag, niter, relres = _blqmr.blqmr_solve_real_multi(
-        n, nnz, nrhs, Ap, Ai, Ax, B,
-        maxiter, tol, droptol, dopcond
+        n, nnz, nrhs, Ap, Ai, Ax, B, maxiter, tol, droptol, dopcond
     )
-    
-    return BLQMRResult(x=X.copy(), flag=int(flag), iter=int(niter), relres=float(relres))
+
+    return BLQMRResult(
+        x=X.copy(), flag=int(flag), iter=int(niter), relres=float(relres)
+    )
 
 
 def blqmr_scipy(
@@ -168,7 +171,7 @@ def blqmr_scipy(
     tol: float = 1e-6,
     maxiter: Optional[int] = None,
     M=None,
-    **kwargs
+    **kwargs,
 ) -> Tuple[np.ndarray, int]:
     """
     SciPy-compatible interface for BLQMR solver.
@@ -177,14 +180,15 @@ def blqmr_scipy(
         from scipy.sparse import csc_matrix
     except ImportError:
         raise ImportError("scipy required for blqmr_scipy")
-    
+
     A_csc = csc_matrix(A)
     Ap = A_csc.indptr.astype(np.int32)
     Ai = A_csc.indices.astype(np.int32)
     Ax = A_csc.data.astype(np.float64)
-    
-    result = blqmr_solve(Ap, Ai, Ax, b, x0=x0, tol=tol, 
-                         maxiter=maxiter, zero_based=True, **kwargs)
+
+    result = blqmr_solve(
+        Ap, Ai, Ax, b, x0=x0, tol=tol, maxiter=maxiter, zero_based=True, **kwargs
+    )
     return result.x, result.flag
 
 
@@ -192,38 +196,40 @@ def _test():
     """Quick test to verify installation."""
     print("BLIT BLQMR Test")
     print("=" * 40)
-    
+
     n, nnz = 5, 12
     # 0-based indexing
     Ap = np.array([0, 2, 5, 9, 10, 12], dtype=np.int32)
     Ai = np.array([0, 1, 0, 2, 4, 1, 2, 3, 4, 2, 1, 4], dtype=np.int32)
-    Ax = np.array([2., 3., 3., -1., 4., 4., -3., 1., 2., 2., 6., 1.], dtype=np.float64)
+    Ax = np.array(
+        [2.0, 3.0, 3.0, -1.0, 4.0, 4.0, -3.0, 1.0, 2.0, 2.0, 6.0, 1.0], dtype=np.float64
+    )
     b = np.array([8.0, 45.0, -3.0, 3.0, 19.0], dtype=np.float64)
-    
+
     print(f"Matrix: {n}x{n}, nnz={nnz}")
     print(f"Ap: {Ap}")
     print(f"Ai: {Ai}")
     print(f"Ax: {Ax}")
     print(f"b: {b}")
-    
+
     # Debug: Check what f2py expects
     print("\nCalling Fortran solver...")
-    
+
     result = blqmr_solve(Ap, Ai, Ax, b, tol=1e-8, droptol=0.0001)
-    
+
     print(f"\n{result}")
     print(f"Solution: {result.x}")
-    
+
     # Verify
     A = np.zeros((n, n))
     for j in range(n):
-        for p in range(Ap[j], Ap[j+1]):
+        for p in range(Ap[j], Ap[j + 1]):
             A[Ai[p], j] = Ax[p]
     res = np.linalg.norm(A @ result.x - b)
     print(f"||Ax - b|| = {res:.2e}")
-    
+
     return result.converged
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     _test()

@@ -15,13 +15,20 @@ license = {text = "BSD-3-Clause OR LGPL-3.0-or-later OR GPL-3.0-or-later"}
 authors = [
     {name = "Qianqian Fang", email = "q.fang@neu.edu"},
 ]
-keywords = ["sparse", "linear-algebra", "iterative-solver", "qmr", "fortran"]
+keywords = ["sparse", "linear-algebra", "iterative-solver", "qmr", "fortran", "umfpack"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: BSD License",
+    "License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: OS Independent",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
     "Programming Language :: Fortran",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
@@ -29,7 +36,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Mathematics",
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.7"
 dependencies = ["numpy>=1.16"]
 
 [project.optional-dependencies]
@@ -40,6 +47,26 @@ dev = ["pytest>=6.0", "scipy>=1.0", "build", "twine"]
 [project.urls]
 Homepage = "http://blit.sourceforge.net"
 Repository = "https://github.com/fangq/blit"
+Documentation = "http://blit.sourceforge.net"
+"Bug Tracker" = "https://github.com/fangq/blit/issues"
 
 [tool.setuptools]
 packages = ["blit"]
+
+[tool.cibuildwheel]
+build = "cp39-* cp310-* cp311-* cp312-*"
+skip = "*-musllinux* pp*"
+test-command = "python -c \"import blit; blit.test()\""
+
+[tool.cibuildwheel.linux]
+archs = ["x86_64", "aarch64"]
+before-all = [
+    "yum install -y epel-release || true",
+    "yum install -y suitesparse-devel lapack-devel blas-devel || apt-get update && apt-get install -y libsuitesparse-dev liblapack-dev libblas-dev",
+]
+
+[tool.cibuildwheel.macos]
+archs = ["x86_64", "arm64"]
+
+[tool.cibuildwheel.windows]
+archs = ["AMD64"]
