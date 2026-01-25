@@ -24,6 +24,7 @@
 !--------------------------------------------------------------------------
 
         subroutine BLQMROnCreate(this, n)
+        use iso_c_binding, only: c_null_ptr
         implicit none
 
         type(BLQMRSolver), intent(inout) :: this
@@ -43,8 +44,8 @@
         this%relres=1e100_Kdouble 
 
         this%ilu%n=n
-        this%ilu%numeric=0
-        this%ilu%symbolic=0 
+        this%ilu%numeric=c_null_ptr
+        this%ilu%symbolic=c_null_ptr
         this%ilu%nz=0
 
         end subroutine BLQMROnCreate

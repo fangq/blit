@@ -31,7 +31,7 @@
 #define MTYPEID_COMPLEX 2
 
 module blit_blqmr_real
-        use iso_c_binding, only: c_char,c_size_t,c_int,c_double
+        use iso_c_binding, only: c_char,c_size_t,c_int,c_double,c_ptr
         use blit_precision
         use blit_ilupcond
         use blit_sparseutil_real

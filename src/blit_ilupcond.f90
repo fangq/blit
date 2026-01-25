@@ -27,7 +27,7 @@
 !>\brief module for incomplete LU decomposition of a sparse matrix (preconditioner)
 !--------------------------------------------------------------------------
 module blit_ilupcond
-use iso_c_binding, only: c_char,c_size_t,c_int,c_double
+use iso_c_binding, only: c_char,c_size_t,c_int,c_double,c_ptr,c_null_ptr
 use blit_precision
 implicit none
 
@@ -38,9 +38,11 @@ implicit none
         integer,parameter :: UMFP_DROPTOL = 19
 
         type, bind(c) :: ILUPcond
-                integer(c_int) :: n, nz, status, iscomplex    ! Fortran-variables
-                integer(c_int) :: numeric, symbolic ! UMFPACK-variables
-                real(c_double),dimension(20)         :: control
+                integer(c_int) :: n, nz, status, iscomplex
+                ! CRITICAL FIX: Use c_ptr for UMFPACK handles (64-bit pointers)
+                type(c_ptr) :: numeric = c_null_ptr
+                type(c_ptr) :: symbolic = c_null_ptr
+                real(c_double),dimension(20) :: control
         end type ILUPcond
 
 contains
@@ -57,7 +59,8 @@ contains
 
         this%n=n
         this%nz=nz
-        this%numeric=-1
+        this%numeric=c_null_ptr
+        this%symbolic=c_null_ptr
         this%status=-1
         this%iscomplex=0
 
@@ -69,18 +72,19 @@ contains
 !--------------------------------------------------------------------------
 
         subroutine ILUPcondDestroy(this)
+        use iso_c_binding, only: c_associated
         implicit none
 
         type(ILUPcond), intent(inout) :: this
 
-        if(this%numeric>0) then
+        if(c_associated(this%numeric)) then
                 if(this%iscomplex==0) then
                         call umf4fnum(this%numeric)
                 else
                         call zumf4fnum(this%numeric)
                 endif
         endif
-        this%numeric=-1
+        this%numeric=c_null_ptr
 
         end subroutine ILUPcondDestroy
 
@@ -104,9 +108,7 @@ contains
                 this%iscomplex=1
                 call zumf4def(this%control)
         endif
-        !this%control(1) = 2
         this%control(UMFP_DROPTOL) = droptol
-        !call umf4pcon(this%control)
 
         if(.not. present(Az)) then
                 call umf4sym(this%n, this%n, Ap-1, Ai-1, Ax, this%symbolic, this%control, info)
