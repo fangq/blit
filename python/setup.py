@@ -129,7 +129,7 @@ def run_setup_with_extension():
     """Run setup with Fortran extension."""
     setup(
         name="blit",
-        version="1.0.0",
+        version="0.8.0",
         description="Block Quasi-Minimal-Residual sparse linear solver",
         author="Qianqian Fang",
         author_email="q.fang@neu.edu",
@@ -153,7 +153,7 @@ def run_setup_without_extension():
     """Run setup without Fortran extension (pure Python fallback)."""
     setup(
         name="blit",
-        version="1.0.0",
+        version="0.8.0",
         description="Block Quasi-Minimal-Residual sparse linear solver",
         author="Qianqian Fang",
         author_email="q.fang@neu.edu",

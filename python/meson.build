@@ -28,6 +28,10 @@ incdir_f2py = run_command(py,
 
 inc_np = include_directories(incdir_numpy, incdir_f2py)
 
+# f2py fortranobject.c - required for linking f2py extensions
+f2py_source_dir = incdir_f2py
+fortranobject_c = f2py_source_dir / 'fortranobject.c'
+
 # Source directory (relative to this meson.build)
 src_dir = '../src'
 
@@ -217,9 +221,9 @@ else
   c_args = ['-O3', '-fPIC']
 endif
 
-# Build extension
+# Build extension - include fortranobject.c for f2py runtime support
 py.extension_module('_blqmr',
-  [fortran_src, c_src, f2py_wrapper],
+  [fortran_src, c_src, f2py_wrapper, fortranobject_c],
   include_directories: [inc_np] + suitesparse_inc_dirs,
   dependencies: [py_dep, blas_dep, lapack_dep] + umfpack_deps,
   fortran_args: fortran_args,

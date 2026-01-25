@@ -86,7 +86,7 @@ Solve sparse system Ax = b.
 
 **Parameters:**
 - `Ap`: Column pointers (int32, length n+1)
-- `Ai`: Row indices (int32, length nnz)  
+- `Ai`: Row indices (int32, length nnz)
 - `Ax`: Non-zero values (float64, length nnz)
 - `b`: Right-hand side (float64, length n)
 - `tol`: Convergence tolerance (default: 1e-6)
