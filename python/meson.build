@@ -7,11 +7,11 @@
 #   # or for development
 #   pip install -e . --no-build-isolation
 
-project('blit', ['c', 'fortran'],
-  version: '1.0.0',
+project('blocksolver', ['c', 'fortran'],
+  version: '0.8.1',
   license: 'BSD-3-Clause OR LGPL-3.0-or-later',
   meson_version: '>=0.64.0',
-  default_options: ['buildtype=release', 'default_library=static']
+  default_options: ['buildtype=release', 'default_library=static', 'prefer_static=true']
 )
 
 py = import('python').find_installation(pure: false)
@@ -154,15 +154,18 @@ endif
 umfpack_deps = []
 
 # Try to find static libraries first, fall back to shared
+# Use static: true with required: true to enforce static linking where possible
 umfpack_lib = cc.find_library('umfpack', dirs: lib_dirs, static: true, required: false)
 if not umfpack_lib.found()
   umfpack_lib = cc.find_library('umfpack', dirs: lib_dirs, required: true)
+  message('WARNING: Using shared libumfpack - wheel may need auditwheel')
 endif
 umfpack_deps += umfpack_lib
 
 amd_lib = cc.find_library('amd', dirs: lib_dirs, static: true, required: false)
 if not amd_lib.found()
   amd_lib = cc.find_library('amd', dirs: lib_dirs, required: true)
+  message('WARNING: Using shared libamd - wheel may need auditwheel')
 endif
 umfpack_deps += amd_lib
 
