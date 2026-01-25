@@ -1,10 +1,11 @@
 [build-system]
 requires = [
-    "numpy>=1.16,<2.0",
-    "setuptools>=45",
-    "wheel",
+    "meson-python>=0.13.0",
+    "meson>=0.64.0",
+    "ninja",
+    "numpy",
 ]
-build-backend = "setuptools.build_meta"
+build-backend = "mesonpy"
 
 [project]
 name = "blit"
@@ -28,17 +29,17 @@ classifiers = [
     "Operating System :: Microsoft :: Windows",
     "Programming Language :: Fortran",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Mathematics",
 ]
-requires-python = ">=3.7"
+requires-python = ">=3.8"
 dependencies = [
-    "numpy>=1.16",
+    "numpy>=1.20",
     "scipy>=1.0",
 ]
 
@@ -53,11 +54,11 @@ Repository = "https://github.com/fangq/blit"
 Documentation = "http://blit.sourceforge.net"
 "Bug Tracker" = "https://github.com/fangq/blit/issues"
 
-[tool.setuptools]
-packages = ["blit"]
+[tool.meson-python.args]
+install = ['--skip-subprojects']
 
 [tool.cibuildwheel]
-build = "cp39-* cp310-* cp311-* cp312-*"
+build = "cp39-* cp310-* cp311-* cp312-* cp313-*"
 skip = "*-musllinux* pp*"
 test-command = "python -c \"import blit; blit.test()\""
 

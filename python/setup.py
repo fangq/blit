@@ -82,15 +82,20 @@ def find_umfpack():
     return include_dirs, library_dirs, libraries
 
 
-# Try numpy.distutils first (NumPy < 2.0), fall back to setuptools
+# Try numpy.distutils first (NumPy < 2.0 and Python < 3.12), fall back to setuptools
+USE_NUMPY_DISTUTILS = False
 try:
-    from numpy.distutils.core import setup, Extension
+    import sys
 
-    USE_NUMPY_DISTUTILS = True
+    # numpy.distutils is deprecated in Python 3.12+ even in NumPy 1.x
+    if sys.version_info < (3, 12):
+        from numpy.distutils.core import setup, Extension
+
+        USE_NUMPY_DISTUTILS = True
+    else:
+        from setuptools import setup, Extension
 except ImportError:
     from setuptools import setup, Extension
-
-    USE_NUMPY_DISTUTILS = False
 
 
 def get_extension():
@@ -188,8 +193,14 @@ if __name__ == "__main__":
             print("Falling back to pure Python installation")
             run_setup_without_extension()
     else:
-        if not USE_NUMPY_DISTUTILS:
-            print("Note: numpy.distutils not available (NumPy 2.0+)")
+        import sys
+
+        if sys.version_info >= (3, 12):
+            print("Note: Python 3.12+ does not support numpy.distutils")
+            print("Installing pure Python version")
+            print("For Fortran extension, use Python 3.11 or earlier with NumPy <2.0")
+        elif not USE_NUMPY_DISTUTILS:
+            print("Note: numpy.distutils not available")
             print(
                 "Installing pure Python version (use NumPy <2.0 for Fortran extension)"
             )

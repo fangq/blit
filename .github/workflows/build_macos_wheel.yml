@@ -16,14 +16,7 @@ jobs:
     strategy:
       matrix:
         os: [macos-15-intel, macos-14]
-        python_version: [ '3.6', '3.7', '3.8', '3.9', '3.10', '3.11', '3.13']
-        exclude:
-          - os: macos-14
-            python_version: 3.6
-          - os: macos-14
-            python_version: 3.7
-          - os: macos-14
-            python_version: pypy3.7
+        python_version: ['3.10', '3.11', '3.12', '3.13']
     outputs:
       perform_pypi_upload: ${{ steps.perform_pypi_upload_check.outputs.perform_pypi_upload }}
     steps:
@@ -37,17 +30,53 @@ jobs:
           python-version: ${{ matrix.python_version }}
       - name: Install dependencies
         run: |
-          brew install suite-sparse openblas lapack gcc
-      - name: Build Wheels
+          brew install suite-sparse openblas lapack gcc pkg-config
+      - name: Setup Fortran compiler
+        run: |
+          # Find the gfortran installed by gcc
+          GCC_VERSION=$(brew list --versions gcc | sed 's/gcc //' | cut -d. -f1)
+          GFORTRAN_PATH=$(brew --prefix gcc)/bin/gfortran-${GCC_VERSION}
+          # Create symlink if gfortran doesn't exist
+          if [ ! -f /usr/local/bin/gfortran ]; then
+            sudo ln -sf ${GFORTRAN_PATH} /usr/local/bin/gfortran || true
+          fi
+          # Also add to PATH
+          echo "$(brew --prefix gcc)/bin" >> $GITHUB_PATH
+          # Verify
+          which gfortran || which gfortran-${GCC_VERSION}
+          gfortran --version || gfortran-${GCC_VERSION} --version
+      - name: Build Wheels (Python < 3.12, numpy.distutils)
+        if: ${{ matrix.python_version == '3.10' || matrix.python_version == '3.11' }}
         env:
-          LDFLAGS: "-L/opt/homebrew/lib -L/usr/local/lib -L/opt/homebrew/opt/openblas/lib"
+          LDFLAGS: "-L/opt/homebrew/lib -L/usr/local/lib -L/opt/homebrew/opt/openblas/lib -L/usr/local/opt/openblas/lib"
           CPPFLAGS: "-I/opt/homebrew/include -I/usr/local/include"
           UMFPACK_INCLUDE: "/opt/homebrew/include/suitesparse:/usr/local/include/suitesparse:/opt/homebrew/include:/usr/local/include"
-          UMFPACK_LIB: "/opt/homebrew/lib:/usr/local/lib:/opt/homebrew/opt/openblas/lib"
+          UMFPACK_LIB: "/opt/homebrew/lib:/usr/local/lib:/opt/homebrew/opt/openblas/lib:/usr/local/opt/openblas/lib"
+          FC: gfortran
+          F77: gfortran
+          F90: gfortran
         run: |
           cd python/
-          pip install wheel "setuptools<65.0" "numpy>=1.20,<2.0" scipy meson-python meson ninja
+          pip install wheel setuptools "numpy>=1.20,<2.0" scipy
           python setup.py bdist_wheel
+          ls dist/
+          mv dist/ ../
+          cd ../
+      - name: Build Wheels (Python >= 3.12, meson)
+        if: ${{ matrix.python_version == '3.12' || matrix.python_version == '3.13' }}
+        env:
+          LDFLAGS: "-L/opt/homebrew/lib -L/usr/local/lib -L/opt/homebrew/opt/openblas/lib -L/usr/local/opt/openblas/lib"
+          CPPFLAGS: "-I/opt/homebrew/include -I/usr/local/include"
+          UMFPACK_INCLUDE: "/opt/homebrew/include/suitesparse:/usr/local/include/suitesparse:/opt/homebrew/include:/usr/local/include"
+          UMFPACK_LIB: "/opt/homebrew/lib:/usr/local/lib:/opt/homebrew/opt/openblas/lib:/usr/local/opt/openblas/lib"
+          FC: gfortran
+          F77: gfortran
+          F90: gfortran
+          CC: gcc
+        run: |
+          cd python/
+          pip install build meson-python meson ninja numpy scipy
+          python -m build --wheel
           ls dist/
           mv dist/ ../
           cd ../
@@ -71,7 +100,7 @@ jobs:
       - name: Download Wheels from Build Job
         uses: actions/download-artifact@v4
         with:
-          pattern: macos-wheels-macos-15-*
+          pattern: macos-wheels-macos-15-intel-*
           merge-multiple: true
           path: dist/
       - name: Upload packages to PyPI

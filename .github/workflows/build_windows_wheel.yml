@@ -18,7 +18,7 @@ jobs:
         shell: bash
     strategy:
       matrix:
-        python_version: [ '3.6', '3.7', '3.8', '3.9', '3.10', '3.11', '3.12']
+        python_version: ['3.9', '3.10', '3.11', '3.12', '3.13']
     outputs:
       perform_pypi_upload: ${{ steps.perform_pypi_upload_check.outputs.perform_pypi_upload }}
     steps:
@@ -39,17 +39,38 @@ jobs:
             mingw-w64-x86_64-lapack
             mingw-w64-x86_64-openblas
             mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-pkg-config
       - name: Put MSYS2_MinGW64 on PATH
         run: echo "D:/a/_temp/msys64/mingw64/bin" >> $GITHUB_PATH
-      - name: Build Wheels
+      - name: Build Wheels (Python < 3.12, numpy.distutils)
+        if: ${{ matrix.python_version == '3.9' || matrix.python_version == '3.10' || matrix.python_version == '3.11' }}
         env:
           UMFPACK_INCLUDE: "D:/a/_temp/msys64/mingw64/include/suitesparse;D:/a/_temp/msys64/mingw64/include"
           UMFPACK_LIB: "D:/a/_temp/msys64/mingw64/lib"
-          CMAKE_ARGS: -GNinja
+          FC: gfortran
+          F77: gfortran
+          F90: gfortran
         run: |
           cd python/
-          pip install wheel "setuptools<65.0" "numpy>=1.20,<2.0" scipy meson-python meson ninja
+          pip install wheel setuptools "numpy>=1.20,<2.0" scipy
           python setup.py bdist_wheel
+          ls dist/
+          mv dist/ ../
+          cd ../
+      - name: Build Wheels (Python >= 3.12, meson)
+        if: ${{ matrix.python_version == '3.12' || matrix.python_version == '3.13' }}
+        env:
+          UMFPACK_INCLUDE: "D:/a/_temp/msys64/mingw64/include/suitesparse;D:/a/_temp/msys64/mingw64/include"
+          UMFPACK_LIB: "D:/a/_temp/msys64/mingw64/lib"
+          FC: gfortran
+          F77: gfortran
+          F90: gfortran
+          CC: gcc
+          PKG_CONFIG_PATH: "D:/a/_temp/msys64/mingw64/lib/pkgconfig"
+        run: |
+          cd python/
+          pip install build meson-python meson ninja numpy scipy
+          python -m build --wheel
           ls dist/
           mv dist/ ../
           cd ../
