@@ -40,6 +40,7 @@ jobs:
             mingw-w64-x86_64-openblas
             mingw-w64-x86_64-ninja
             mingw-w64-x86_64-pkg-config
+            mingw-w64-x86_64-tools-git
       - name: Put MSYS2_MinGW64 on PATH
         run: echo "D:/a/_temp/msys64/mingw64/bin" >> $GITHUB_PATH
       - name: Create Python import library for MinGW
