@@ -48,7 +48,7 @@ jobs:
           CMAKE_ARGS: -GNinja
         run: |
           cd python/
-          pip install wheel setuptools "numpy<2.0"
+          pip install wheel "setuptools<65.0" "numpy>=1.25,<2.0"
           python setup.py bdist_wheel
           ls dist/
           mv dist/ ../
