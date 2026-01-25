@@ -90,7 +90,6 @@ jobs:
       - name: Run unit-tests
         run: |
           cd python/
-          pip install unittest
           python -m unittest discover -v tests
       - name: Check If the Build Version Exists on PyPI
         id: perform_pypi_upload_check
