@@ -119,9 +119,12 @@ if __name__ == "__main__":
         packages=["blit"],
         ext_modules=[get_extension()],
         python_requires=">=3.8",
-        install_requires=["numpy>=1.16"],
+        install_requires=[
+            "numpy>=1.16",
+            "scipy>=1.0",
+        ],
         extras_require={
-            "scipy": ["scipy>=1.0"],
-            "test": ["pytest>=6.0", "scipy>=1.0"],
+            "fast": ["numba>=0.50"],
+            "test": ["pytest>=6.0"],
         },
     )

@@ -37,12 +37,15 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Mathematics",
 ]
 requires-python = ">=3.7"
-dependencies = ["numpy>=1.16"]
+dependencies = [
+    "numpy>=1.16",
+    "scipy>=1.0",
+]
 
 [project.optional-dependencies]
-scipy = ["scipy>=1.0"]
-test = ["pytest>=6.0", "scipy>=1.0"]
-dev = ["pytest>=6.0", "scipy>=1.0", "build", "twine"]
+fast = ["numba>=0.50"]
+test = ["pytest>=6.0"]
+dev = ["pytest>=6.0", "build", "twine"]
 
 [project.urls]
 Homepage = "http://blit.sourceforge.net"

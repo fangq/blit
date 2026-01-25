@@ -16,7 +16,7 @@ jobs:
     strategy:
       matrix:
         os: [macos-15-intel, macos-14]
-        python_version: [ '3.6', '3.7', '3.8', '3.9', '3.10', '3.11', '3.12', '3.13']
+        python_version: [ '3.6', '3.7', '3.8', '3.9', '3.10', '3.11', '3.13']
         exclude:
           - os: macos-14
             python_version: 3.6
@@ -46,7 +46,7 @@ jobs:
           UMFPACK_LIB: "/opt/homebrew/lib:/usr/local/lib:/opt/homebrew/opt/openblas/lib"
         run: |
           cd python/
-          pip install wheel "setuptools<65.0" "numpy>=1.25,<2.0"
+          pip install wheel "setuptools<65.0" "numpy>=1.25,<2.0" scipy
           python setup.py bdist_wheel
           ls dist/
           mv dist/ ../
