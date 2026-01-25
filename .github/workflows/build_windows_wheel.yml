@@ -18,7 +18,7 @@ jobs:
         shell: bash
     strategy:
       matrix:
-        python_version: [ '3.6', '3.7', '3.8', '3.9', '3.10', '3.11', '3.12', 'pypy3.7', 'pypy3.8', 'pypy3.9', 'pypy3.10' ]
+        python_version: [ '3.6', '3.7', '3.8', '3.9', '3.10', '3.11', '3.12']
     outputs:
       perform_pypi_upload: ${{ steps.perform_pypi_upload_check.outputs.perform_pypi_upload }}
     steps:
@@ -30,24 +30,25 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python_version }}
-      - name: Setup Miniconda
-        uses: conda-incubator/setup-miniconda@v3
+      - uses: msys2/setup-msys2@v2
         with:
-          auto-update-conda: true
-          python-version: ${{ matrix.python_version }}
-          channels: conda-forge
-      - name: Install dependencies
-        shell: bash -l {0}
-        run: |
-          conda install -y suitesparse lapack blas m2w64-gcc-fortran "numpy<2.0"
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc-fortran
+            mingw-w64-x86_64-suitesparse
+            mingw-w64-x86_64-lapack
+            mingw-w64-x86_64-openblas
+            mingw-w64-x86_64-ninja
+      - name: Put MSYS2_MinGW64 on PATH
+        run: echo "D:/a/_temp/msys64/mingw64/bin" >> $GITHUB_PATH
       - name: Build Wheels
-        shell: bash -l {0}
         env:
-          UMFPACK_INCLUDE: "$CONDA_PREFIX/Library/include/suitesparse;$CONDA_PREFIX/Library/include"
-          UMFPACK_LIB: "$CONDA_PREFIX/Library/lib"
+          UMFPACK_INCLUDE: "D:/a/_temp/msys64/mingw64/include/suitesparse;D:/a/_temp/msys64/mingw64/include"
+          UMFPACK_LIB: "D:/a/_temp/msys64/mingw64/lib"
+          CMAKE_ARGS: -GNinja
         run: |
           cd python/
-          pip install "wheel" "setuptools" "numpy<2.0"
+          pip install wheel setuptools "numpy<2.0"
           python setup.py bdist_wheel
           ls dist/
           mv dist/ ../
