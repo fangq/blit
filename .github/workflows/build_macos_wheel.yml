@@ -46,7 +46,7 @@ jobs:
           UMFPACK_LIB: "/opt/homebrew/lib:/usr/local/lib:/opt/homebrew/opt/openblas/lib"
         run: |
           cd python/
-          pip install wheel "setuptools<65.0" "numpy>=1.25,<2.0" scipy
+          pip install wheel "setuptools<65.0" "numpy>=1.20,<2.0" scipy meson-python meson ninja
           python setup.py bdist_wheel
           ls dist/
           mv dist/ ../
@@ -65,6 +65,8 @@ jobs:
     needs: build_macos_wheels
     runs-on: ubuntu-latest
     if: ${{ github.repository_owner == 'fangq' && needs.build_macos_wheels.outputs.perform_pypi_upload == 1 && github.event_name != 'pull_request'}}
+    permissions:
+      id-token: write
     steps:
       - name: Download Wheels from Build Job
         uses: actions/download-artifact@v4
@@ -84,6 +86,8 @@ jobs:
     needs: build_macos_wheels
     runs-on: ubuntu-latest
     if: ${{ github.repository_owner == 'fangq' && needs.build_macos_wheels.outputs.perform_pypi_upload == 1 && github.event_name != 'pull_request'}}
+    permissions:
+      id-token: write
     steps:
       - name: Download Wheels from Build Job
         uses: actions/download-artifact@v4

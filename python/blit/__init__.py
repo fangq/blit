@@ -61,6 +61,7 @@ __all__ = [
 def test():
     """Run basic tests to verify installation."""
     from .blqmr import _test
+
     return _test()
 
 
@@ -76,7 +77,7 @@ def get_backend_info():
         - 'has_numba': bool (for Python backend acceleration)
     """
     return {
-        'backend': 'binary' if BLQMR_EXT else 'native',
-        'has_fortran': BLQMR_EXT,
-        'has_numba': HAS_NUMBA,
+        "backend": "binary" if BLQMR_EXT else "native",
+        "has_fortran": BLQMR_EXT,
+        "has_numba": HAS_NUMBA,
     }

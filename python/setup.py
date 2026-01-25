@@ -8,8 +8,8 @@ Build commands (run from python/ directory):
 """
 
 import os
+import sys
 from pathlib import Path
-from numpy.distutils.core import setup, Extension
 
 PYTHON_DIR = Path(__file__).parent.absolute()
 ROOT_DIR = PYTHON_DIR.parent
@@ -70,7 +70,9 @@ def find_umfpack():
 
     for var, lst in [("UMFPACK_INCLUDE", include_dirs), ("UMFPACK_LIB", library_dirs)]:
         if var in os.environ:
-            lst.insert(0, os.environ[var])
+            for p in os.environ[var].split(os.pathsep):
+                if p and p not in lst:
+                    lst.insert(0, p)
 
     if "SUITESPARSE_ROOT" in os.environ:
         root = os.environ["SUITESPARSE_ROOT"]
@@ -78,6 +80,17 @@ def find_umfpack():
         library_dirs.insert(0, os.path.join(root, "lib"))
 
     return include_dirs, library_dirs, libraries
+
+
+# Try numpy.distutils first (NumPy < 2.0), fall back to setuptools
+try:
+    from numpy.distutils.core import setup, Extension
+
+    USE_NUMPY_DISTUTILS = True
+except ImportError:
+    from setuptools import setup, Extension
+
+    USE_NUMPY_DISTUTILS = False
 
 
 def get_extension():
@@ -101,13 +114,14 @@ def get_extension():
         include_dirs=include_dirs,
         library_dirs=library_dirs,
         libraries=libraries,
-        extra_f90_compile_args=["-O3", "-fPIC", "-cpp"],
-        extra_f77_compile_args=["-O3", "-fPIC"],
+        extra_f90_compile_args=["-O3", "-fPIC", "-cpp"] if USE_NUMPY_DISTUTILS else [],
+        extra_f77_compile_args=["-O3", "-fPIC"] if USE_NUMPY_DISTUTILS else [],
         extra_compile_args=["-O3", "-fPIC"],
     )
 
 
-if __name__ == "__main__":
+def run_setup_with_extension():
+    """Run setup with Fortran extension."""
     setup(
         name="blit",
         version="1.0.0",
@@ -128,3 +142,55 @@ if __name__ == "__main__":
             "test": ["pytest>=6.0"],
         },
     )
+
+
+def run_setup_without_extension():
+    """Run setup without Fortran extension (pure Python fallback)."""
+    setup(
+        name="blit",
+        version="1.0.0",
+        description="Block Quasi-Minimal-Residual sparse linear solver",
+        author="Qianqian Fang",
+        author_email="q.fang@neu.edu",
+        url="http://blit.sourceforge.net",
+        license="BSD/LGPL/GPL",
+        packages=["blit"],
+        python_requires=">=3.8",
+        install_requires=[
+            "numpy>=1.16",
+            "scipy>=1.0",
+        ],
+        extras_require={
+            "fast": ["numba>=0.50"],
+            "test": ["pytest>=6.0"],
+        },
+    )
+
+
+if __name__ == "__main__":
+    # Check if we can build the extension
+    can_build_extension = USE_NUMPY_DISTUTILS
+
+    # Check for required source files
+    if can_build_extension:
+        try:
+            get_extension()
+        except FileNotFoundError as e:
+            print(f"Warning: {e}")
+            print("Building without Fortran extension (pure Python only)")
+            can_build_extension = False
+
+    if can_build_extension:
+        try:
+            run_setup_with_extension()
+        except Exception as e:
+            print(f"Warning: Failed to build Fortran extension: {e}")
+            print("Falling back to pure Python installation")
+            run_setup_without_extension()
+    else:
+        if not USE_NUMPY_DISTUTILS:
+            print("Note: numpy.distutils not available (NumPy 2.0+)")
+            print(
+                "Installing pure Python version (use NumPy <2.0 for Fortran extension)"
+            )
+        run_setup_without_extension()
