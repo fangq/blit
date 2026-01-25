@@ -7,7 +7,7 @@
 #   # or for development
 #   pip install -e . --no-build-isolation
 
-project('blocksolver', ['c', 'fortran'],
+project('blit', ['c', 'fortran'],
   version: '1.0.0',
   license: 'BSD-3-Clause OR LGPL-3.0-or-later',
   meson_version: '>=0.64.0',
@@ -232,6 +232,22 @@ else
   blas_lapack_deps += lapack_lib
 endif
 
+# OpenMP dependency (needed by OpenBLAS and SuiteSparse when built with OpenMP)
+omp_dep = dependency('openmp', required: false)
+if not omp_dep.found()
+  # Try to find libgomp directly
+  omp_lib = cc.find_library('gomp', dirs: lib_dirs, static: true, required: false)
+  if not omp_lib.found()
+    omp_lib = cc.find_library('gomp', dirs: lib_dirs, required: false)
+  endif
+  if not omp_lib.found()
+    omp_lib = cc.find_library('omp', dirs: lib_dirs, required: false)
+  endif
+  if omp_lib.found()
+    omp_dep = omp_lib
+  endif
+endif
+
 # On Windows with MinGW, we may need additional libraries for static linking
 if is_windows
   # GFortran runtime (usually needed for static Fortran libs)
@@ -254,6 +270,12 @@ if is_windows
   if pthread_lib.found()
     blas_lapack_deps += pthread_lib
   endif
+endif
+
+# Collect all dependencies
+all_deps = [py_dep] + umfpack_deps + blas_lapack_deps
+if omp_dep.found()
+  all_deps += omp_dep
 endif
 
 # Fortran sources (order matters for module dependencies)
@@ -299,7 +321,7 @@ endif
 py.extension_module('_blqmr',
   [fortran_src, c_src, f2py_wrapper, fortranobject_c],
   include_directories: [inc_np] + suitesparse_inc_dirs,
-  dependencies: [py_dep] + umfpack_deps + blas_lapack_deps,
+  dependencies: all_deps,
   fortran_args: fortran_args,
   c_args: c_args,
   link_args: link_args,
