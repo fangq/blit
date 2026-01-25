@@ -7,11 +7,11 @@
 #   # or for development
 #   pip install -e . --no-build-isolation
 
-project('blocksolver', ['c', 'fortran'],
-  version: '0.8.1',
+project('blit', ['c', 'fortran'],
+  version: '1.0.0',
   license: 'BSD-3-Clause OR LGPL-3.0-or-later',
   meson_version: '>=0.64.0',
-  default_options: ['buildtype=release']
+  default_options: ['buildtype=release', 'default_library=static']
 )
 
 py = import('python').find_installation(pure: false)
@@ -150,44 +150,110 @@ else
   endforeach
 endif
 
-# Find UMFPACK and dependencies
-umfpack_dep = dependency('umfpack', required: false)
-if not umfpack_dep.found()
+# Find UMFPACK and dependencies - prefer static libraries
+umfpack_deps = []
+
+# Try to find static libraries first, fall back to shared
+umfpack_lib = cc.find_library('umfpack', dirs: lib_dirs, static: true, required: false)
+if not umfpack_lib.found()
   umfpack_lib = cc.find_library('umfpack', dirs: lib_dirs, required: true)
+endif
+umfpack_deps += umfpack_lib
+
+amd_lib = cc.find_library('amd', dirs: lib_dirs, static: true, required: false)
+if not amd_lib.found()
   amd_lib = cc.find_library('amd', dirs: lib_dirs, required: true)
+endif
+umfpack_deps += amd_lib
+
+# Optional SuiteSparse dependencies
+cholmod_lib = cc.find_library('cholmod', dirs: lib_dirs, static: true, required: false)
+if not cholmod_lib.found()
   cholmod_lib = cc.find_library('cholmod', dirs: lib_dirs, required: false)
+endif
+if cholmod_lib.found()
+  umfpack_deps += cholmod_lib
+endif
+
+colamd_lib = cc.find_library('colamd', dirs: lib_dirs, static: true, required: false)
+if not colamd_lib.found()
   colamd_lib = cc.find_library('colamd', dirs: lib_dirs, required: false)
+endif
+if colamd_lib.found()
+  umfpack_deps += colamd_lib
+endif
+
+camd_lib = cc.find_library('camd', dirs: lib_dirs, static: true, required: false)
+if not camd_lib.found()
+  camd_lib = cc.find_library('camd', dirs: lib_dirs, required: false)
+endif
+if camd_lib.found()
+  umfpack_deps += camd_lib
+endif
+
+ccolamd_lib = cc.find_library('ccolamd', dirs: lib_dirs, static: true, required: false)
+if not ccolamd_lib.found()
+  ccolamd_lib = cc.find_library('ccolamd', dirs: lib_dirs, required: false)
+endif
+if ccolamd_lib.found()
+  umfpack_deps += ccolamd_lib
+endif
+
+suitesparse_lib = cc.find_library('suitesparseconfig', dirs: lib_dirs, static: true, required: false)
+if not suitesparse_lib.found()
   suitesparse_lib = cc.find_library('suitesparseconfig', dirs: lib_dirs, required: false)
-
-  umfpack_deps = [umfpack_lib, amd_lib]
-  foreach lib : [cholmod_lib, colamd_lib, suitesparse_lib]
-    if lib.found()
-      umfpack_deps += lib
-    endif
-  endforeach
-else
-  umfpack_deps = [umfpack_dep]
+endif
+if suitesparse_lib.found()
+  umfpack_deps += suitesparse_lib
 endif
 
-# Find BLAS/LAPACK
-blas_dep = dependency('blas', required: false)
-lapack_dep = dependency('lapack', required: false)
+# Find BLAS/LAPACK - prefer static OpenBLAS which includes both
+blas_lapack_deps = []
 
-if not blas_dep.found()
-  # Try OpenBLAS first
+openblas_lib = cc.find_library('openblas', dirs: lib_dirs, static: true, required: false)
+if not openblas_lib.found()
   openblas_lib = cc.find_library('openblas', dirs: lib_dirs, required: false)
-  if openblas_lib.found()
-    blas_dep = openblas_lib
-    if not lapack_dep.found()
-      lapack_dep = openblas_lib
-    endif
-  else
-    blas_dep = cc.find_library('blas', dirs: lib_dirs, required: true)
-  endif
 endif
 
-if not lapack_dep.found()
-  lapack_dep = cc.find_library('lapack', dirs: lib_dirs, required: true)
+if openblas_lib.found()
+  blas_lapack_deps += openblas_lib
+else
+  # Fall back to separate BLAS and LAPACK
+  blas_lib = cc.find_library('blas', dirs: lib_dirs, static: true, required: false)
+  if not blas_lib.found()
+    blas_lib = cc.find_library('blas', dirs: lib_dirs, required: true)
+  endif
+  blas_lapack_deps += blas_lib
+  
+  lapack_lib = cc.find_library('lapack', dirs: lib_dirs, static: true, required: false)
+  if not lapack_lib.found()
+    lapack_lib = cc.find_library('lapack', dirs: lib_dirs, required: true)
+  endif
+  blas_lapack_deps += lapack_lib
+endif
+
+# On Windows with MinGW, we may need additional libraries for static linking
+if is_windows
+  # GFortran runtime (usually needed for static Fortran libs)
+  gfortran_lib = cc.find_library('gfortran', dirs: lib_dirs, static: true, required: false)
+  if gfortran_lib.found()
+    blas_lapack_deps += gfortran_lib
+  endif
+  
+  # QuadMath (needed by gfortran)
+  quadmath_lib = cc.find_library('quadmath', dirs: lib_dirs, static: true, required: false)
+  if quadmath_lib.found()
+    blas_lapack_deps += quadmath_lib
+  endif
+  
+  # Windows threading
+  pthread_lib = cc.find_library('pthread', dirs: lib_dirs, static: true, required: false)
+  if not pthread_lib.found()
+    pthread_lib = cc.find_library('winpthread', dirs: lib_dirs, static: true, required: false)
+  endif
+  if pthread_lib.found()
+    blas_lapack_deps += pthread_lib
+  endif
 endif
 
 # Fortran sources (order matters for module dependencies)
@@ -216,25 +282,34 @@ f2py_wrapper = custom_target('_blqmr_f2py',
 if is_windows
   fortran_args = ['-O3', '-cpp']
   c_args = ['-O3']
-else
+  # Static linking flags for Windows
+  link_args = ['-static-libgcc', '-static-libgfortran']
+elif is_macos
   fortran_args = ['-O3', '-cpp', '-fPIC']
   c_args = ['-O3', '-fPIC']
+  link_args = []
+else
+  # Linux
+  fortran_args = ['-O3', '-cpp', '-fPIC']
+  c_args = ['-O3', '-fPIC']
+  link_args = ['-static-libgcc', '-static-libgfortran']
 endif
 
 # Build extension - include fortranobject.c for f2py runtime support
 py.extension_module('_blqmr',
   [fortran_src, c_src, f2py_wrapper, fortranobject_c],
   include_directories: [inc_np] + suitesparse_inc_dirs,
-  dependencies: [py_dep, blas_dep, lapack_dep] + umfpack_deps,
+  dependencies: [py_dep] + umfpack_deps + blas_lapack_deps,
   fortran_args: fortran_args,
   c_args: c_args,
+  link_args: link_args,
   install: true,
-  subdir: 'blocksolver',
+  subdir: 'blit',
 )
 
 # Install Python files
 py.install_sources(
-  'blocksolver/__init__.py',
-  'blocksolver/blqmr.py',
-  subdir: 'blocksolver',
+  'blit/__init__.py',
+  'blit/blqmr.py',
+  subdir: 'blit',
 )
