@@ -3,13 +3,6 @@ set -e
 
 cd /src/python/
 
-# Install static libraries if available (for proper static linking)
-echo "Installing static library development packages..."
-yum install -y suitesparse-static blas-static lapack-static 2>/dev/null || \
-yum install -y suitesparse-devel blas-devel lapack-devel 2>/dev/null || \
-apt-get install -y libsuitesparse-dev libblas-dev liblapack-dev 2>/dev/null || \
-echo "Could not install static libs, will use shared libraries"
-
 # Build wheels for each Python version
 for PYBIN in /opt/python/cp3{9,10,11,12,13}*/bin/; do
     if [ -d "$PYBIN" ]; then
@@ -25,7 +18,12 @@ for PYBIN in /opt/python/cp3{9,10,11,12,13}*/bin/; do
         rm -rf build/ *.egg-info/ dist/ builddir/
         
         # Install build dependencies
-        "${PYBIN}/pip" install build meson-python meson ninja numpy scipy
+        "${PYBIN}/pip" install --upgrade pip
+        "${PYBIN}/pip" install build meson-python meson ninja numpy
+        
+        # Install scipy - prefer pre-built wheels to avoid source compilation
+        "${PYBIN}/pip" install --only-binary=:all: scipy || \
+            "${PYBIN}/pip" install scipy
         
         # Build wheel using meson-python (respects pyproject.toml)
         echo "Using meson-python build system"
