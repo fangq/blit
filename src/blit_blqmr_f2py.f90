@@ -202,3 +202,66 @@ subroutine blqmr_solve_complex(n, nnz, Ap, Ai, Ax, b, x, &
     call BLQMRDestroy(qmr)
 
 end subroutine blqmr_solve_complex
+
+
+!> @brief Solve complex sparse system AX = B (multiple RHS) - F2PY interface
+
+subroutine blqmr_solve_complex_multi(n, nnz, nrhs, Ap, Ai, Ax, B, X, &
+                                      maxit, qtol, droptol, dopcond, &
+                                      flag, iter, relres)
+    use blit_precision
+    use blit_blqmr_complex
+    implicit none
+
+    !f2py intent(in) n, nnz, nrhs, maxit, dopcond
+    !f2py intent(in) qtol, droptol
+    !f2py intent(in) Ap, Ai, Ax, B
+    !f2py intent(out) X, flag, iter, relres
+    !f2py depend(n) Ap
+    !f2py depend(nnz) Ai, Ax
+    !f2py depend(n,nrhs) B, X
+
+    integer, intent(in) :: n, nnz, nrhs, maxit, dopcond
+    real(kind=Kdouble), intent(in) :: qtol, droptol
+    integer, intent(in) :: Ap(n+1), Ai(nnz)
+    complex(kind=Kdouble), intent(in) :: Ax(nnz), B(n, nrhs)
+    complex(kind=Kdouble), intent(out) :: X(n, nrhs)
+    real(kind=Kdouble), intent(out) :: relres
+    integer, intent(out) :: flag, iter
+
+    ! Local variables
+    type(BLQMRSolver) :: qmr
+    integer :: nnz_local
+    integer :: Ap_local(n+1), Ai_local(nnz)
+    complex(kind=Kdouble) :: Ax_local(nnz), B_local(n, nrhs), X_local(n, nrhs)
+
+    ! Copy arrays
+    nnz_local = nnz
+    Ap_local = Ap
+    Ai_local = Ai
+    Ax_local = Ax
+    B_local = B
+    X_local = (0.0_Kdouble, 0.0_Kdouble)
+
+    ! Initialize solver
+    call BLQMRCreate(qmr, n)
+    qmr%maxit = maxit
+    qmr%qtol = qtol
+    qmr%droptol = droptol
+    qmr%dopcond = dopcond
+    qmr%isquasires = 0
+
+    ! Solve with multiple RHS (true block method)
+    call BLQMRPrep(qmr, Ap_local, Ai_local, Ax_local, nnz_local)
+    call BLQMRSolve(qmr, Ap_local, Ai_local, Ax_local, nnz_local, X_local, B_local, nrhs)
+
+    ! Results
+    X = X_local
+    flag = qmr%flag
+    iter = qmr%iter
+    relres = qmr%relres
+
+    ! Cleanup
+    call BLQMRDestroy(qmr)
+
+end subroutine blqmr_solve_complex_multi

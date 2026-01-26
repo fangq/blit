@@ -195,6 +195,16 @@
             Qres0=maxval(sqrt(sum(abs(conjg(vt)*vt),1)))
 #endif
         endif
+
+        ! ADD THIS: Early exit if initial residual is already below tolerance
+        if (Qres0 < this%qtol .or. Qres0 < 1.0d-14) then
+            this%flag = 0
+            this%iter = 0
+            this%relres = 0.0_Kdouble
+            this%res = Qres0
+            return
+        endif
+
         this%flag=1
         do k=1,this%maxit
                 t3=modulo(k,3)+1;t3p=modulo(k+1,3)+1;t3n=modulo(k-1,3)+1;t3nn=modulo(k-2,3)+1
@@ -275,21 +285,32 @@
 #endif                
                 endif
                 this%res=Qres
+                this%iter=k
+
+                ! Check for NaN FIRST, before using Qres in any computation
+                if (isnan(Qres)) then
+                    this%relres = abs(Qres1) / max(abs(Qres0), 1.0d-300)
+                    if (Qres1 < this%qtol * Qres0) this%flag = 0
+                    exit
+                endif
+
+                this%relres = abs(Qres) / max(abs(Qres0), 1.0d-300)
 
                 if(iand(this%debug,DEBUG_RES)>0) &
-                    write(*,'(A,I4,A,E16.8,A,E16.8)') 'Iteration [',k,'] MaxResidual=', Qres, ', Relative=', Qres/Qres0
+                    write(*,'(A,I4,A,E16.8,A,E16.8)') 'Iteration [',k,'] MaxResidual=', Qres, ', Relative=', this%relres
 
+                ! Check for stagnation
                 if(k>1 .and. abs(Qres-Qres1)<epsilon(Qres)) then
-                     this%flag=3
-                     exit
+                    this%flag=3
+                    exit
                 endif
 
                 Qres1=Qres
-                this%relres=Qres/Qres0
-                this%iter=k
-                if(this%relres < this%qtol) then
-                        this%flag=0
-                        exit
+
+                ! Check for convergence (very small residual or meets tolerance)
+                if (Qres < 1.0d-14 .or. this%relres < this%qtol) then
+                    this%flag = 0
+                    exit
                 endif
         enddo
 

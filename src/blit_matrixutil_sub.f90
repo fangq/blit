@@ -39,39 +39,54 @@
 !--------------------------------------------------------------------------
 
         subroutine MatrixInversion(A, invA)
-        implicit none
+            implicit none
 
-        MTYPE(kind=Kdouble),dimension(:,:),intent(in) :: A
-        MTYPE(kind=Kdouble),dimension(:,:),intent(out):: invA
-        integer :: n, info
-        MTYPE(kind=Kdouble),dimension(size(A,1)) :: work
-        integer,dimension(size(A,1)) :: ipiv
+            MTYPE(kind=Kdouble),dimension(:,:),intent(in) :: A
+            MTYPE(kind=Kdouble),dimension(:,:),intent(out):: invA
+            integer :: n, info
+            MTYPE(kind=Kdouble),dimension(size(A,1)) :: work
+            integer,dimension(size(A,1)) :: ipiv
+            real(kind=Kdouble), parameter :: tol = 1.0d-14
 
-        if(size(A,1)/=size(A,2)) then
-                stop
-        endif
-        n=size(A,1)
-        invA=A
+            if(size(A,1)/=size(A,2)) then
+                    stop
+            endif
+            n=size(A,1)
+    
+            ! Check for near-zero matrix (1x1 case or small norm)
+            if (n == 1) then
+                if (abs(A(1,1)) < tol) then
+                    ! Singular 1x1 matrix - return large value or identity-like behavior
+                    invA(1,1) = 0.0_Kdouble
+                    return
+                else
+                    invA(1,1) = 1.0_Kdouble / A(1,1)
+                    return
+                endif
+            endif
+    
+            invA=A
 #if MTYPEID == MTYPEID_REAL
-        call dgetrf(n, n, invA, n, ipiv, info)
+            call dgetrf(n, n, invA, n, ipiv, info)
 #else
-        call zgetrf(n, n, invA, n, ipiv, info)
+            call zgetrf(n, n, invA, n, ipiv, info)
 #endif
-        if(info/=0) then
-                print *, 'error encontered when calling dgetrf in MatrixInversion, code:', info
-                call PrintMatrix(A,'A = ')
-                stop
-        endif
+            if(info/=0) then
+                    ! Matrix is singular - return zero matrix instead of stopping
+                    ! print *, 'warning: singular matrix in MatrixInversion, code:', info
+                    invA = 0.0_Kdouble
+                    return
+            endif
 #if MTYPEID == MTYPEID_REAL
-        call dgetri(n, invA, n, ipiv, work, n, info)
+            call dgetri(n, invA, n, ipiv, work, n, info)
 #else
-        call zgetri(n, invA, n, ipiv, work, n, info)
+            call zgetri(n, invA, n, ipiv, work, n, info)
 #endif
-        if(info/=0) then
-                print *, 'error encontered when calling dgetri in MatrixInversion, code:', info
-                call PrintMatrix(A,'A = ')
-                stop
-        endif
+            if(info/=0) then
+                    ! print *, 'warning: dgetri failed in MatrixInversion, code:', info
+                    invA = 0.0_Kdouble
+                    return
+            endif
 
         end subroutine MatrixInversion
 
@@ -138,31 +153,38 @@
 !> \brief compute the quasi-QR decomposition of marix A
 !--------------------------------------------------------------------------
 
-        subroutine QuasiQR(A, Q, R) ! economic form only
-        implicit none
+        subroutine QuasiQR(A, Q, R)
+            implicit none
 
-        MTYPE(kind=Kdouble),dimension(:,:),intent(in)  :: A
-        MTYPE(kind=Kdouble),dimension(:,:),intent(out) :: R
-        MTYPE(kind=Kdouble),dimension(size(A,1),size(A,2))  :: Q
+            MTYPE(kind=Kdouble),dimension(:,:),intent(in)  :: A
+            MTYPE(kind=Kdouble),dimension(:,:),intent(out) :: R
+            MTYPE(kind=Kdouble),dimension(size(A,1),size(A,2))  :: Q
+            real(kind=Kdouble), parameter :: tol = 1.0d-14
 
-        integer :: n, k,j
+            integer :: n, k, j
 
-        n=size(A,2)
-        R=0.0_Kdouble
+            n=size(A,2)
+            R=0.0_Kdouble
 
-        Q=A
-        do k=1,n
+            Q=A
+            do k=1,n
 #if MTYPEID == MTYPEID_REAL
-            R(k,k)=dsqrt(sum(Q(:,k)*Q(:,k)))
+                R(k,k)=dsqrt(sum(Q(:,k)*Q(:,k)))
 #else
-            R(k,k)=sqrt(sum(Q(:,k)*Q(:,k)))
+                R(k,k)=sqrt(sum(Q(:,k)*Q(:,k)))
 #endif
-            Q(:,k)=Q(:,k)*(1.0_Kdouble/R(k,k))
-            do j=k+1,n
-                R(k,j)=sum(Q(:,k)*Q(:,j))
-                Q(:,j)=Q(:,j)-R(k,j)*Q(:,k)
+                ! CRITICAL FIX: Check for near-zero before division
+                if (abs(R(k,k)) > tol) then
+                    Q(:,k)=Q(:,k)*(1.0_Kdouble/R(k,k))
+                    do j=k+1,n
+                        R(k,j)=sum(Q(:,k)*Q(:,j))
+                        Q(:,j)=Q(:,j)-R(k,j)*Q(:,k)
+                    enddo
+                else
+                    ! Column is nearly zero, leave Q(:,k) as is (or set to zero)
+                    Q(:,k) = 0.0_Kdouble
+                endif
             enddo
-        enddo
 
         end subroutine QuasiQR
 

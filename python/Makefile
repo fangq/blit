@@ -75,8 +75,8 @@ test: build
 	$(PYTHON) -c "import blocksolver; blocksolver.test()"
 
 # Pytest
-pytest: build
-	$(PYTHON) -m pytest tests/ -v
+unittest: build
+	$(PYTHON) -m unittest discover -v tests
 
 # Clean
 clean:

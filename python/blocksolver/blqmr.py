@@ -134,6 +134,52 @@ def _qqr_kernel_real(Q, R, n, m):
                     Q[i, k] -= Q[i, j] * dot
 
 
+@njit(cache=True)
+def _qqr_kernel_complex(Q, R, n, m):
+    """Numba-accelerated quasi-QR kernel for complex arrays."""
+    for j in range(m):
+        # Quasi inner product: sum(q*q) WITHOUT conjugation
+        r_jj_sq = 0.0j
+        for i in range(n):
+            r_jj_sq += Q[i, j] * Q[i, j]  # No conjugation!
+        r_jj = np.sqrt(r_jj_sq)
+        R[j, j] = r_jj
+        if abs(r_jj) > 1e-14:
+            inv_r_jj = 1.0 / r_jj
+            for i in range(n):
+                Q[i, j] *= inv_r_jj
+            for k in range(j + 1, m):
+                # Quasi inner product: sum(q_j * q_k) WITHOUT conjugation
+                dot = 0.0j
+                for i in range(n):
+                    dot += Q[i, j] * Q[i, k]  # No conjugation!
+                R[j, k] = dot
+                for i in range(n):
+                    Q[i, k] -= Q[i, j] * dot
+
+
+@njit(cache=True)
+def _qqr_kernel_real(Q, R, n, m):
+    """Numba-accelerated quasi-QR kernel for real arrays."""
+    for j in range(m):
+        r_jj_sq = 0.0
+        for i in range(n):
+            r_jj_sq += Q[i, j] * Q[i, j]
+        r_jj = np.sqrt(r_jj_sq)
+        R[j, j] = r_jj
+        if abs(r_jj) > 1e-14:
+            inv_r_jj = 1.0 / r_jj
+            for i in range(n):
+                Q[i, j] *= inv_r_jj
+            for k in range(j + 1, m):
+                dot = 0.0
+                for i in range(n):
+                    dot += Q[i, j] * Q[i, k]
+                R[j, k] = dot
+                for i in range(n):
+                    Q[i, k] -= Q[i, j] * dot
+
+
 def qqr(
     A: np.ndarray, tol: float = 0, use_numba: bool = True
 ) -> Tuple[np.ndarray, np.ndarray]:
@@ -173,14 +219,20 @@ def qqr(
     else:
         for j in range(m):
             qj = Q[:, j]
-            r_jj_sq = np.dot(qj, qj)
+            # CRITICAL FIX: Use sum(qj * qj) NOT np.dot(qj, qj)
+            # np.dot conjugates the first argument for complex arrays!
+            # Fortran: R(k,k)=dsqrt(sum(Q(:,k)*Q(:,k))) - no conjugation
+            r_jj_sq = np.sum(qj * qj)  # Quasi inner product - NO conjugation
             r_jj = np.sqrt(r_jj_sq)
             R[j, j] = r_jj
             if np.abs(r_jj) > 1e-14:
                 Q[:, j] *= 1.0 / r_jj
                 if j < m - 1:
-                    R[j, j + 1 :] = np.dot(Q[:, j], Q[:, j + 1 :])
-                    Q[:, j + 1 :] -= np.outer(Q[:, j], R[j, j + 1 :])
+                    # CRITICAL FIX: Quasi inner product for off-diagonal
+                    # Fortran: R(k,j)=sum(Q(:,k)*Q(:,j)) - no conjugation
+                    for k in range(j + 1, m):
+                        R[j, k] = np.sum(Q[:, j] * Q[:, k])  # NO conjugation
+                        Q[:, k] -= R[j, k] * Q[:, j]
 
     return Q, R
 
@@ -217,8 +269,12 @@ class SparsePreconditioner:
 
     def __init__(self, M1, M2=None):
         self.is_two_part = M2 is not None
-        self.is_ilu1 = isinstance(M1, _ILUPreconditioner)
-        self.is_ilu2 = isinstance(M2, _ILUPreconditioner) if M2 is not None else False
+        self.is_ilu1 = isinstance(M1, (_ILUPreconditioner, _LUPreconditioner))
+        self.is_ilu2 = (
+            isinstance(M2, (_ILUPreconditioner, _LUPreconditioner))
+            if M2 is not None
+            else False
+        )
 
         if M1 is not None:
             if self.is_ilu1:
@@ -382,7 +438,7 @@ class BLQMRWorkspace:
 # =============================================================================
 
 
-def make_preconditioner(A: sparse.spmatrix, precond_type: str = "diag"):
+def make_preconditioner(A: sparse.spmatrix, precond_type: str = "diag", **kwargs):
     """
     Create a preconditioner for iterative solvers.
 
@@ -392,8 +448,14 @@ def make_preconditioner(A: sparse.spmatrix, precond_type: str = "diag"):
         System matrix
     precond_type : str
         'diag' or 'jacobi': Diagonal (Jacobi) preconditioner
-        'ilu' or 'ilu0': Incomplete LU
+        'ilu' or 'ilu0': Incomplete LU with minimal fill
+        'ilut': Incomplete LU with threshold (better quality)
+        'lu': Full LU factorization (exact, use as reference)
         'ssor': Symmetric SOR
+    **kwargs : dict
+        Additional parameters for ILU:
+        - drop_tol: Drop tolerance (default: 1e-4 for ilut, 0 for ilu0)
+        - fill_factor: Fill factor (default: 10 for ilut, 1 for ilu0)
 
     Returns
     -------
@@ -403,24 +465,70 @@ def make_preconditioner(A: sparse.spmatrix, precond_type: str = "diag"):
     if precond_type in ("diag", "jacobi"):
         diag = A.diagonal().copy()
         diag[np.abs(diag) < 1e-14] = 1.0
-        return sparse.diags(diag, format="csr")
+        return sparse.diags(
+            1.0 / diag, format="csr"
+        )  # Return inverse for preconditioning!
 
-    elif precond_type in ("ilu", "ilu0"):
+    elif precond_type == "ilu0":
+        # ILU(0) - no fill-in, fast but may be poor quality
         try:
             ilu = spilu(A.tocsc(), drop_tol=0, fill_factor=1)
             return _ILUPreconditioner(ilu)
         except Exception as e:
-            warnings.warn(f"ILU factorization failed: {e}, falling back to diagonal")
+            warnings.warn(f"ILU(0) factorization failed: {e}, falling back to diagonal")
             return make_preconditioner(A, "diag")
 
+    elif precond_type in ("ilu", "ilut"):
+        # ILUT - ILU with threshold, better quality (similar to UMFPACK)
+        drop_tol = kwargs.get("drop_tol", 1e-4)
+        fill_factor = kwargs.get("fill_factor", 10)
+        try:
+            ilu = spilu(A.tocsc(), drop_tol=drop_tol, fill_factor=fill_factor)
+            return _ILUPreconditioner(ilu)
+        except Exception as e:
+            warnings.warn(f"ILUT factorization failed: {e}, trying ILU(0)")
+            try:
+                ilu = spilu(A.tocsc(), drop_tol=0, fill_factor=1)
+                return _ILUPreconditioner(ilu)
+            except Exception as e2:
+                warnings.warn(f"ILU(0) also failed: {e2}, falling back to diagonal")
+                return make_preconditioner(A, "diag")
+
+    elif precond_type == "lu":
+        # Full LU - exact factorization (for reference/debugging)
+        try:
+            lu = splu(A.tocsc())
+            return _LUPreconditioner(lu)
+        except Exception as e:
+            warnings.warn(f"LU factorization failed: {e}, falling back to ILUT")
+            return make_preconditioner(A, "ilut")
+
     elif precond_type == "ssor":
-        omega = 1.0
+        omega = kwargs.get("omega", 1.0)
         D = sparse.diags(A.diagonal(), format="csr")
         L = sparse.tril(A, k=-1, format="csr")
         return (D + omega * L).tocsr()
 
     else:
         raise ValueError(f"Unknown preconditioner type: {precond_type}")
+
+
+class _LUPreconditioner:
+    """Wrapper for full LU preconditioner."""
+
+    def __init__(self, lu_factor):
+        self.lu = lu_factor
+        self.shape = (lu_factor.shape[0], lu_factor.shape[1])
+        self.dtype = np.float64  # Assume real for now
+
+    def solve(self, b):
+        if b.ndim == 1:
+            return self.lu.solve(b)
+        else:
+            x = np.zeros_like(b)
+            for i in range(b.shape[1]):
+                x[:, i] = self.lu.solve(b[:, i])
+            return x
 
 
 # =============================================================================
@@ -463,10 +571,13 @@ def _blqmr_python_impl(
 
     # Setup preconditioner
     if M1 is not None:
-        if isinstance(M1, _ILUPreconditioner):
+        if isinstance(M1, (_ILUPreconditioner, _LUPreconditioner)):
             precond = SparsePreconditioner(M1, M2)
         elif sparse.issparse(M1):
             precond = SparsePreconditioner(M1, M2)
+        elif hasattr(M1, "solve"):
+            # Custom preconditioner with .solve() method
+            precond = M1  # Use directly
         else:
             precond = DensePreconditioner(M1, M2)
     else:
@@ -477,7 +588,16 @@ def _blqmr_python_impl(
     else:
         x = np.asarray(x0, dtype=dtype).reshape(n, m).copy()
 
-    t3, t3n, t3p, t3nn = 0, 2, 1, 1
+    # Initialize indices: Fortran t3=mod(0,3)+1=1 -> Python t3=0
+    t3 = 0
+    t3n = 2
+    t3p = 1
+
+    # Initialize Q matrices (identity)
+    ws.Qa[:, :, :] = 0
+    ws.Qb[:, :, :] = 0
+    ws.Qc[:, :, :] = 0
+    ws.Qd[:, :, :] = 0
     ws.Qa[:, :, t3] = np.eye(m, dtype=dtype)
     ws.Qd[:, :, t3n] = np.eye(m, dtype=dtype)
     ws.Qd[:, :, t3] = np.eye(m, dtype=dtype)
@@ -493,105 +613,151 @@ def _blqmr_python_impl(
         if np.any(np.isnan(ws.vt)):
             return x, 2, 1.0, 0, np.array([])
 
+    # QQR decomposition
     Q, R = qqr(ws.vt)
     ws.v[:, :, t3p] = Q
     ws.beta[:, :, t3p] = R
 
-    col_norms = np.sqrt(np.einsum("ij,ij->j", Q.conj(), Q).real)
-    ws.omega[:, :, t3p] = np.diag(col_norms)
-    np.matmul(ws.omega[:, :, t3p], ws.beta[:, :, t3p], out=ws.taot)
+    # Compute omega - standard norm WITH conjugation (Hermitian norm)
+    # Fortran: omega(i,i,t3p)=sqrt(sum(conjg(v(:,i,t3p))*v(:,i,t3p)))
+    for i in range(m):
+        col = ws.v[:, i, t3p]
+        if is_complex_input:
+            ws.omega[i, i, t3p] = np.sqrt(np.sum(np.conj(col) * col).real)
+        else:
+            ws.omega[i, i, t3p] = np.sqrt(np.sum(col * col))
+
+    # taut = omega * beta
+    ws.taot[:] = ws.omega[:, :, t3p] @ ws.beta[:, :, t3p]
 
     isquasires = not residual
     if isquasires:
-        Qres0 = np.sqrt(np.einsum("ij,ij->j", ws.taot.conj(), ws.taot).real).max()
+        # Fortran: Qres0=maxval(sqrt(sum(abs(conjg(taut)*taut),1))) for complex
+        if is_complex_input:
+            Qres0 = np.max(np.sqrt(np.sum(np.abs(np.conj(ws.taot) * ws.taot), axis=0)))
+        else:
+            Qres0 = np.max(np.sqrt(np.sum(ws.taot * ws.taot, axis=0)))
     else:
-        omegat = Q @ np.diag(1.0 / (col_norms + 1e-16))
-        Qres0 = np.sqrt(np.einsum("ij,ij->j", ws.vt.conj(), ws.vt).real).max()
+        omegat = np.zeros((n, m), dtype=dtype)
+        for i in range(m):
+            if np.abs(ws.omega[i, i, t3p]) > 1e-14:
+                omegat[:, i] = ws.v[:, i, t3p] / ws.omega[i, i, t3p]
+        if is_complex_input:
+            Qres0 = np.max(np.sqrt(np.sum(np.abs(np.conj(ws.vt) * ws.vt), axis=0)))
+        else:
+            Qres0 = np.max(np.sqrt(np.sum(ws.vt * ws.vt, axis=0)))
 
     if Qres0 < 1e-16:
         result = x.real if not is_complex_input else x
         return result, 0, 0.0, 0, np.array([0.0])
 
-    flag, resv, Qres1, relres, iter_count = 1, np.zeros(maxiter), None, 1.0, 0
-    omegat = None if isquasires else Q @ np.diag(1.0 / (col_norms + 1e-16))
+    flag, resv, Qres1, relres, iter_count = 1, np.zeros(maxiter), -1.0, 1.0, 0
 
     for k in range(1, maxiter + 1):
-        t3, t3n, t3p, t3nn = k % 3, (k - 1) % 3, (k + 1) % 3, (k - 2) % 3
+        # Index cycling
+        t3 = k % 3
+        t3p = (k + 1) % 3
+        t3n = (k - 1) % 3
+        t3nn = (k - 2) % 3
 
+        # tmp = A * v(:,:,t3)
         if A_is_sparse:
             ws.Av[:] = A @ ws.v[:, :, t3]
         else:
             np.matmul(A, ws.v[:, :, t3], out=ws.Av)
 
+        # Apply preconditioner
         if precond is not None:
             precond.solve(ws.Av, out=ws.vt)
-            ws.vt -= ws.v[:, :, t3n] @ ws.beta[:, :, t3].T
+            ws.vt[:] = ws.vt - ws.v[:, :, t3n] @ ws.beta[:, :, t3].T
         else:
-            np.matmul(ws.v[:, :, t3n], ws.beta[:, :, t3].T, out=ws.vt)
-            np.subtract(ws.Av, ws.vt, out=ws.vt)
+            ws.vt[:] = ws.Av - ws.v[:, :, t3n] @ ws.beta[:, :, t3].T
 
-        np.matmul(ws.v[:, :, t3].T, ws.vt, out=ws.alpha)
-        ws.vt -= ws.v[:, :, t3] @ ws.alpha
+        # alpha = v^T * vt (transpose, not conjugate transpose)
+        ws.alpha[:] = ws.v[:, :, t3].T @ ws.vt
+        ws.vt[:] = ws.vt - ws.v[:, :, t3] @ ws.alpha
 
+        # QQR decomposition
         Q, R = qqr(ws.vt)
         ws.v[:, :, t3p] = Q
         ws.beta[:, :, t3p] = R
 
-        col_norms = np.sqrt(np.einsum("ij,ij->j", Q.conj(), Q).real)
-        ws.omega[:, :, t3p] = np.diag(col_norms)
+        # Compute omega (standard Hermitian norm)
+        for i in range(m):
+            col = ws.v[:, i, t3p]
+            if is_complex_input:
+                ws.omega[i, i, t3p] = np.sqrt(np.sum(np.conj(col) * col).real)
+            else:
+                ws.omega[i, i, t3p] = np.sqrt(np.sum(col * col))
 
-        np.matmul(ws.omega[:, :, t3n], ws.beta[:, :, t3].T, out=ws.tmp0)
-        np.matmul(ws.Qb[:, :, t3nn], ws.tmp0, out=ws.theta)
+        # Compute intermediate matrices
+        ws.tmp0[:] = ws.omega[:, :, t3n] @ ws.beta[:, :, t3].T
+        ws.theta[:] = ws.Qb[:, :, t3nn] @ ws.tmp0
+        ws.tmp1[:] = ws.Qd[:, :, t3nn] @ ws.tmp0
+        ws.tmp2[:] = ws.omega[:, :, t3] @ ws.alpha
+        ws.eta[:] = ws.Qa[:, :, t3n] @ ws.tmp1 + ws.Qb[:, :, t3n] @ ws.tmp2
+        ws.zetat[:] = ws.Qc[:, :, t3n] @ ws.tmp1 + ws.Qd[:, :, t3n] @ ws.tmp2
 
-        np.matmul(ws.Qd[:, :, t3nn], ws.tmp0, out=ws.tmp1)
-        np.matmul(ws.omega[:, :, t3], ws.alpha, out=ws.tmp2)
-        np.matmul(ws.Qa[:, :, t3n], ws.tmp1, out=ws.eta)
-        ws.eta += ws.Qb[:, :, t3n] @ ws.tmp2
-
-        np.matmul(ws.Qc[:, :, t3n], ws.tmp1, out=ws.zetat)
-        ws.zetat += ws.Qd[:, :, t3n] @ ws.tmp2
-
+        # Build ZZ matrix and do standard QR
         ws.stacked[:m, :] = ws.zetat
-        np.matmul(ws.omega[:, :, t3p], ws.beta[:, :, t3p], out=ws.stacked[m:, :])
+        ws.stacked[m:, :] = ws.omega[:, :, t3p] @ ws.beta[:, :, t3p]
 
         QQ, zeta_full = np.linalg.qr(ws.stacked, mode="complete")
         ws.zeta[:] = zeta_full[:m, :]
-        ws.QQ_full[:] = QQ.conj().T
+
+        if is_complex_input:
+            ws.QQ_full[:] = np.conj(QQ.T)
+        else:
+            ws.QQ_full[:] = QQ.T
 
         ws.Qa[:, :, t3] = ws.QQ_full[:m, :m]
         ws.Qb[:, :, t3] = ws.QQ_full[:m, m : 2 * m]
         ws.Qc[:, :, t3] = ws.QQ_full[m : 2 * m, :m]
         ws.Qd[:, :, t3] = ws.QQ_full[m : 2 * m, m : 2 * m]
 
+        # Invert zeta
         try:
             zeta_inv = np.linalg.inv(ws.zeta)
         except np.linalg.LinAlgError:
             zeta_inv = np.linalg.pinv(ws.zeta)
 
+        # Update p, tau, x, taut
         ws.p[:, :, t3] = (
             ws.v[:, :, t3] - ws.p[:, :, t3n] @ ws.eta - ws.p[:, :, t3nn] @ ws.theta
         ) @ zeta_inv
+        ws.tau[:] = ws.Qa[:, :, t3] @ ws.taot
+        x[:] = x + ws.p[:, :, t3] @ ws.tau
+        ws.taot[:] = ws.Qc[:, :, t3] @ ws.taot
 
-        np.matmul(ws.Qa[:, :, t3], ws.taot, out=ws.tau)
-        x += ws.p[:, :, t3] @ ws.tau
-
-        taot_copy = ws.taot.copy()
-        np.matmul(ws.Qc[:, :, t3], taot_copy, out=ws.taot)
-
+        # Compute residual
         if isquasires:
-            Qres = np.sqrt(np.einsum("ij,ij->j", ws.taot.conj(), ws.taot).real).max()
+            if is_complex_input:
+                Qres = np.max(
+                    np.sqrt(np.sum(np.abs(np.conj(ws.taot) * ws.taot), axis=0))
+                )
+            else:
+                Qres = np.max(np.sqrt(np.sum(ws.taot * ws.taot, axis=0)))
         else:
-            omega_diag_inv = np.diag(1.0 / (col_norms + 1e-16))
-            omegat = (
-                omegat @ ws.Qc[:, :, t3].conj().T
-                + ws.v[:, :, t3p] @ (ws.Qd[:, :, t3] @ omega_diag_inv).conj().T
-            )
-            R_resid = omegat @ ws.taot
-            Qres = np.sqrt(np.einsum("ij,ij->j", R_resid.conj(), R_resid).real).max()
+            tmp0_diag = np.zeros((m, m), dtype=dtype)
+            for i in range(m):
+                if np.abs(ws.omega[i, i, t3p]) > 1e-14:
+                    tmp0_diag[i, :] = ws.Qd[:, i, t3] / ws.omega[i, i, t3p]
+            if is_complex_input:
+                omegat = omegat @ np.conj(ws.Qc[:, :, t3].T) + ws.v[
+                    :, :, t3p
+                ] @ np.conj(tmp0_diag)
+                tmp_res = np.conj(omegat @ ws.taot)
+                Qres = np.max(
+                    np.sqrt(np.sum(np.abs(np.conj(tmp_res) * tmp_res), axis=0))
+                )
+            else:
+                omegat = omegat @ ws.Qc[:, :, t3].T + ws.v[:, :, t3p] @ tmp0_diag
+                tmp_res = omegat @ ws.taot
+                Qres = np.max(np.sqrt(np.sum(tmp_res * tmp_res, axis=0)))
 
         resv[k - 1] = Qres
 
-        if Qres1 is not None and Qres == Qres1:
+        if k > 1 and abs(Qres - Qres1) < np.finfo(dtype).eps:
             flag, iter_count = 3, k
             break
 
@@ -740,7 +906,7 @@ def _blqmr_solve_native_csc(
             M1 = make_preconditioner(A, "ilu")
         except Exception:
             try:
-                M1 = make_preconditioner(A_sp, 'diag')
+                M1 = make_preconditioner(A, "diag")  # FIX: Changed A_sp to A
             except Exception:
                 M1 = None  # Fall back to no preconditioning
 
@@ -850,7 +1016,7 @@ def _blqmr_solve_multi_native(
             M1 = make_preconditioner(A, "ilu")
         except Exception:
             try:
-                M1 = make_preconditioner(A_sp, 'diag')
+                M1 = make_preconditioner(A, "diag")  # FIX: Changed A_sp to A
             except Exception:
                 M1 = None  # Fall back to no preconditioning
 
@@ -992,40 +1158,75 @@ def _blqmr_fortran(
 ) -> BLQMRResult:
     """Fortran backend for blqmr()."""
     A_csc = sparse.csc_matrix(A)
+
+    # CRITICAL: Sort indices for UMFPACK compatibility
+    if not A_csc.has_sorted_indices:
+        A_csc.sort_indices()
+
     Ap = A_csc.indptr.astype(np.int32)
     Ai = A_csc.indices.astype(np.int32)
-    Ax = A_csc.data.astype(np.float64)
 
     n = A_csc.shape[0]
-    nnz = len(Ax)
+    nnz = A_csc.nnz
 
     if maxiter is None:
         maxiter = n
 
-    # Convert to Fortran format
-    Ap_f = np.asfortranarray(Ap + 1, dtype=np.int32)  # 1-based
-    Ai_f = np.asfortranarray(Ai + 1, dtype=np.int32)  # 1-based
-    Ax_f = np.asfortranarray(Ax, dtype=np.float64)
+    # Convert to Fortran format (1-based indexing)
+    Ap_f = np.asfortranarray(Ap + 1, dtype=np.int32)
+    Ai_f = np.asfortranarray(Ai + 1, dtype=np.int32)
 
     dopcond = 1 if use_precond else 0
 
-    if B.ndim == 1 or (B.ndim == 2 and B.shape[1] == 1):
-        b = np.asfortranarray(B.ravel(), dtype=np.float64)
-        x, flag, niter, relres = _blqmr.blqmr_solve_real(
-            n, nnz, Ap_f, Ai_f, Ax_f, b, maxiter, tol, droptol, dopcond
-        )
-        return BLQMRResult(
-            x=x.copy(), flag=int(flag), iter=int(niter), relres=float(relres)
-        )
+    # Check if complex
+    is_complex = np.iscomplexobj(A) or np.iscomplexobj(B)
+
+    if is_complex:
+        # Complex path
+        Ax_f = np.asfortranarray(A_csc.data, dtype=np.complex128)
+
+        if B.ndim == 1 or (B.ndim == 2 and B.shape[1] == 1):
+            # Single RHS
+            b_f = np.asfortranarray(B.ravel(), dtype=np.complex128)
+            x, flag, niter, relres = _blqmr.blqmr_solve_complex(
+                n, nnz, Ap_f, Ai_f, Ax_f, b_f, maxiter, tol, droptol, dopcond
+            )
+            return BLQMRResult(
+                x=x.copy(), flag=int(flag), iter=int(niter), relres=float(relres)
+            )
+        else:
+            # Multiple RHS - use block method
+            B_f = np.asfortranarray(B, dtype=np.complex128)
+            nrhs = B_f.shape[1]
+            X, flag, niter, relres = _blqmr.blqmr_solve_complex_multi(
+                n, nnz, nrhs, Ap_f, Ai_f, Ax_f, B_f, maxiter, tol, droptol, dopcond
+            )
+            return BLQMRResult(
+                x=X.copy(), flag=int(flag), iter=int(niter), relres=float(relres)
+            )
     else:
-        B_f = np.asfortranarray(B, dtype=np.float64)
-        nrhs = B_f.shape[1]
-        X, flag, niter, relres = _blqmr.blqmr_solve_real_multi(
-            n, nnz, nrhs, Ap_f, Ai_f, Ax_f, B_f, maxiter, tol, droptol, dopcond
-        )
-        return BLQMRResult(
-            x=X.copy(), flag=int(flag), iter=int(niter), relres=float(relres)
-        )
+        # Real path
+        Ax_f = np.asfortranarray(A_csc.data, dtype=np.float64)
+
+        if B.ndim == 1 or (B.ndim == 2 and B.shape[1] == 1):
+            # Single RHS
+            b_f = np.asfortranarray(B.ravel(), dtype=np.float64)
+            x, flag, niter, relres = _blqmr.blqmr_solve_real(
+                n, nnz, Ap_f, Ai_f, Ax_f, b_f, maxiter, tol, droptol, dopcond
+            )
+            return BLQMRResult(
+                x=x.copy(), flag=int(flag), iter=int(niter), relres=float(relres)
+            )
+        else:
+            # Multiple RHS - use block method
+            B_f = np.asfortranarray(B, dtype=np.float64)
+            nrhs = B_f.shape[1]
+            X, flag, niter, relres = _blqmr.blqmr_solve_real_multi(
+                n, nnz, nrhs, Ap_f, Ai_f, Ax_f, B_f, maxiter, tol, droptol, dopcond
+            )
+            return BLQMRResult(
+                x=X.copy(), flag=int(flag), iter=int(niter), relres=float(relres)
+            )
 
 
 def _blqmr_native(
@@ -1049,7 +1250,7 @@ def _blqmr_native(
             M1 = make_preconditioner(A_sp, "ilu")
         except Exception:
             try:
-                M1 = make_preconditioner(A_sp, 'diag')
+                M1 = make_preconditioner(A_sp, "diag")
             except Exception:
                 M1 = None  # Fall back to no preconditioning
 

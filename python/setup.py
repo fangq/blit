@@ -87,34 +87,34 @@ def find_umfpack():
     print(f"[setup.py] include_dirs: {include_dirs}")
     print(f"[setup.py] library_dirs: {library_dirs}")
     print(f"[setup.py] libraries: {libraries}")
-    
+
     return include_dirs, library_dirs, libraries
 
 
 def check_source_files():
     """Check if all source files exist and return list of missing files."""
     missing = []
-    
+
     # Check .pyf file
     pyf_path = PYTHON_DIR / SIGNATURE_FILE
     print(f"[setup.py] Checking {pyf_path}: {pyf_path.exists()}")
     if not pyf_path.exists():
         missing.append(str(pyf_path))
-    
+
     # Check Fortran sources
     for f in FORTRAN_SOURCES:
         p = SRC_DIR / f
         print(f"[setup.py] Checking {p}: {p.exists()}")
         if not p.exists():
             missing.append(str(p))
-    
+
     # Check C sources
     for f in C_SOURCES:
         p = SRC_DIR / f
         print(f"[setup.py] Checking {p}: {p.exists()}")
         if not p.exists():
             missing.append(str(p))
-    
+
     return missing
 
 
@@ -124,13 +124,16 @@ try:
     # numpy.distutils is deprecated in Python 3.12+ even in NumPy 1.x
     if sys.version_info < (3, 12):
         from numpy.distutils.core import setup, Extension
+
         USE_NUMPY_DISTUTILS = True
         print("[setup.py] Using numpy.distutils")
     else:
         from setuptools import setup, Extension
+
         print("[setup.py] Using setuptools (Python 3.12+)")
 except ImportError as e:
     from setuptools import setup, Extension
+
     print(f"[setup.py] Using setuptools (numpy.distutils import failed: {e})")
 
 
@@ -211,7 +214,7 @@ if __name__ == "__main__":
     print("=" * 60)
     print("[setup.py] Starting build")
     print("=" * 60)
-    
+
     # Check for --pure-python flag to force pure Python build
     force_pure_python = "--pure-python" in sys.argv
     if force_pure_python:
@@ -219,7 +222,7 @@ if __name__ == "__main__":
         print("[setup.py] --pure-python flag detected, forcing pure Python build")
         run_setup_without_extension()
         sys.exit(0)
-    
+
     # Check if source files exist
     missing_files = check_source_files()
     if missing_files:
@@ -227,7 +230,7 @@ if __name__ == "__main__":
         print("[setup.py] Cannot build Fortran extension, falling back to pure Python")
         run_setup_without_extension()
         sys.exit(0)
-    
+
     # Check if we can use numpy.distutils
     if not USE_NUMPY_DISTUTILS:
         if sys.version_info >= (3, 12):
@@ -238,7 +241,7 @@ if __name__ == "__main__":
         print("[setup.py] Building pure Python version")
         run_setup_without_extension()
         sys.exit(0)
-    
+
     # Try to build with extension
     print("[setup.py] All source files found, attempting to build Fortran extension")
     try:
@@ -249,6 +252,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"[setup.py] ERROR: Failed to build Fortran extension: {e}")
         import traceback
+
         traceback.print_exc()
         print("[setup.py] Falling back to pure Python installation")
         run_setup_without_extension()
