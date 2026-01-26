@@ -166,7 +166,7 @@ def run_setup_with_extension():
     print("[setup.py] Running setup WITH Fortran extension")
     setup(
         name="blocksolver",
-        version="0.8.1",
+        version="0.8.2",
         description="Block Quasi-Minimal-Residual sparse linear solver",
         author="Qianqian Fang",
         author_email="q.fang@neu.edu",
@@ -191,7 +191,7 @@ def run_setup_without_extension():
     print("[setup.py] Running setup WITHOUT Fortran extension (pure Python only)")
     setup(
         name="blocksolver",
-        version="0.8.1",
+        version="0.8.2",
         description="Block Quasi-Minimal-Residual sparse linear solver",
         author="Qianqian Fang",
         author_email="q.fang@neu.edu",
