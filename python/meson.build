@@ -8,7 +8,7 @@
 #   pip install -e . --no-build-isolation
 
 project('blocksolver', ['c', 'fortran'],
-  version: '0.8.2',
+  version: '0.8.3',
   license: 'BSD-3-Clause OR LGPL-3.0-or-later',
   meson_version: '>=0.64.0',
   default_options: ['buildtype=release', 'default_library=static', 'prefer_static=true']

@@ -39,7 +39,7 @@ from .blqmr import (
     HAS_NUMBA,
 )
 
-__version__ = "0.8.2"
+__version__ = "0.8.3"
 __author__ = "Qianqian Fang"
 
 __all__ = [

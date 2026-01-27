@@ -50,7 +50,7 @@ try:
     from numba import njit
 
     HAS_NUMBA = True
-except ImportError:
+except (ImportError, Exception) as e:
     HAS_NUMBA = False
 
     def njit(*args, **kwargs):
