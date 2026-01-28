@@ -26,9 +26,19 @@ function [x,flag,relres,iter,resv]=blqmr(A,B,qtol,maxit,M1,M2,x0,varargin)
 %            M is the left preconditioning matrix where inv(M)*A approx. I
 %      x0: the initial guess of x, dimension N x Nrhs; if x0=[] or ignored,
 %            blqmr sets x0 to zeros(size(B))
-%      opt: an optional input for additional parameters. 
-%            if opt.residual=1, blqmr uses the true residual B-A*x instead
-%            of the quasi-residual
+%      opt: an optional input for additional parameters:
+%            opt.residual: if 1, blqmr uses the true residual B-A*x instead
+%                of the quasi-residual
+%            opt.precond: automatic preconditioner creation, can be:
+%                'ilu'   - ILU(0) factorization (real matrices only)
+%                'ilutp' - ILUTP with drop tolerance (real matrices only)
+%                'ichol' - Incomplete Cholesky (SPD matrices)
+%                'diag'  - Diagonal (Jacobi) preconditioner
+%            opt.droptol: drop tolerance for ILUTP (default: 1e-3)
+%            opt.blocksize: solve RHS in batches of this size (default: all
+%                RHS at once). When blocksize=1, solves one RHS at a time
+%                (more robust for complex symmetric systems). Useful for
+%                memory management or avoiding block algorithm instabilities.
 %
 % Output: 
 %      x: the solution, dimension N x Nrhs
@@ -81,6 +91,67 @@ function [x,flag,relres,iter,resv]=blqmr(A,B,qtol,maxit,M1,M2,x0,varargin)
 
 [n,m]=size(B);
 
+% Parse opt structure first
+opt = [];
+if(nargin>7 && ~isempty(varargin{:}))
+   opt=varargin{1};
+   if(~isstruct(opt))
+       error('opt must be a structure');
+   end
+end
+
+% Check for blocksize option - solve RHS in batches for robustness/memory
+blocksize = m;  % default: solve all RHS at once
+if ~isempty(opt) && isfield(opt, 'blocksize')
+    blocksize = opt.blocksize;
+    if blocksize < 1
+        blocksize = 1;
+    end
+end
+
+% If blocksize < m, solve in batches
+if blocksize < m
+    x = zeros(n, m);
+    if ~isreal(A)
+        x = complex(x);
+    end
+
+    % Calculate number of batches
+    nbatches = ceil(m / blocksize);
+    flags = zeros(1, nbatches);
+    iters = zeros(1, nbatches);
+    relress = zeros(1, nbatches);
+    resv = [];
+
+    % Remove blocksize from opt to avoid infinite recursion
+    opt_batch = opt;
+    opt_batch.blocksize = [];
+
+    for batch = 1:nbatches
+        % Calculate column indices for this batch
+        col_start = (batch - 1) * blocksize + 1;
+        col_end = min(batch * blocksize, m);
+        cols = col_start:col_end;
+
+        % Extract batch data
+        B_batch = B(:, cols);
+        x0_batch = [];
+        if exist('x0','var') && ~isempty(x0)
+            x0_batch = x0(:, cols);
+        end
+
+        % Solve this batch
+        [x(:, cols), flags(batch), relress(batch), iters(batch), ~] = ...
+            blqmr(A, B_batch, qtol, maxit, M1, M2, x0_batch, opt_batch);
+    end
+
+    flag = max(flags);    % Worst case flag
+    relres = max(relress); % Worst case residual
+    iter = max(iters);    % Max iterations
+    return;
+end
+
+% Original block QMR algorithm follows
 znm1=zeros(n,m);
 znm3=zeros(n,m,3);
 zmm1=zeros(m,m);
@@ -108,6 +179,18 @@ if(nargin<4 || (nargin>=4 && isempty(maxit)))
     maxit=min(n,20);
 end
 
+% parse opt for residual option
+isquasires=1;
+if ~isempty(opt) && isfield(opt,'residual')
+    isquasires=~opt.residual;
+end
+
+% auto-create preconditioner if opt.precond is set and M1/M2 not provided
+if ~isempty(opt) && isfield(opt, 'precond') && ...
+   (nargin < 5 || isempty(M1)) && (nargin < 6 || isempty(M2))
+    [M1, M2] = create_preconditioner(A, opt);
+end
+
 % initialize preconditioner
 if(nargin>=5 && ~isempty(M1))
     if(nargin>=6 && ~isempty(M2))
@@ -130,17 +213,6 @@ x=x0;
 iter=0;
 relres=1;
 
-isquasires=1;
-if(nargin>7 && ~isempty(varargin{:}))
-   opt=varargin{1};
-   if(~isstruct(opt))
-       error('opt must be a structure'); 
-   end
-   if(isfield(opt,'residual'))
-       isquasires=~opt.residual;
-   end
-end
-
 % vt0 contains the initial true residual
 if(isprecond)
     if(isprecond==2)
@@ -149,8 +221,9 @@ if(isprecond)
     else
         vt=M\(B-A*x0);
     end
-    if(any(isnan(vt)))
+    if(any(isnan(vt(:))))
         flag=2;
+        resv=[];
         if(nargout<=1)
           fprintf('the preconditioner is rank-deficient, blqmr stops\n');
         end
@@ -159,7 +232,6 @@ if(isprecond)
 else
     vt=B-A*x0;                                %eq (36)
 end
-
 
 [Q,R]=qqr(vt,0); % quasi-qr decomposition,    %eq (37)
 v(:,:,t3p)=Q;
@@ -182,6 +254,7 @@ end
 
 flag=1;
 resv=zeros(maxit,1);
+
 for k=1:maxit
     [t3,t3n,t3p,t3nn]=updateidx(k);
     if(isprecond)
@@ -197,6 +270,17 @@ for k=1:maxit
     end
     alpha=v(:,:,t3).'*vt;  % eq (41)
     vt=vt-v(:,:,t3)*alpha; % eq (42)
+
+    % Check for quasi-norm breakdown (can happen in complex symmetric systems)
+    % quasi-norm = sqrt(sum(vt.*vt)) can be zero even if ||vt||_2 is not
+    vt_quasi_norm_sq = sum(vt.*vt, 1);  % No conjugate - quasi inner product
+    if any(abs(vt_quasi_norm_sq) < 1e-28)
+        % Near breakdown - algorithm has essentially converged or stagnated
+        flag = 3;
+        iter = k;
+        break;
+    end
+
     [Q,R]=qqr(vt,0);       % eq (43), quasi-qr decomposition
     v(:,:,t3p)=Q;
     beta(:,:,t3p)=R;
@@ -218,7 +302,16 @@ for k=1:maxit
     Qc(:,:,t3)=QQ(m+1:2*m,1:m);
     Qd(:,:,t3)=QQ(m+1:2*m,m+1:2*m);
 
-    p(:,:,t3)=(v(:,:,t3)-p(:,:,t3n)*eta-p(:,:,t3nn)*theta)*inv(zeta); %(49)
+    % Check zeta before inversion to detect breakdown
+    zeta_diag = diag(zeta);
+    if any(abs(zeta_diag) < 1e-14) || any(~isfinite(zeta_diag))
+        flag = 3;  % stagnated/breakdown
+        iter = k;
+        break;
+    end
+
+    p(:,:,t3)=(v(:,:,t3)-p(:,:,t3n)*eta-p(:,:,t3nn)*theta)/zeta; % eq (49)
+
     tau=Qa(:,:,t3)*taot;  % eq (50)
     x=x+p(:,:,t3)*tau;    % eq (51)
     taot=Qc(:,:,t3)*taot; % eq (52)
@@ -234,6 +327,7 @@ for k=1:maxit
     resv(k)=Qres;
     if(k>1 && Qres==Qres1)
        flag=3; % stagnated
+       iter=k;
        break;
     end
     Qres1=Qres;
@@ -252,16 +346,99 @@ resv=resv(1:k);
 
 if((flag==1 || flag==3) && nargout<=1)
     resname='quasi-';
-    if(isquasires==0); resname=''; end;
+    if(isquasires==0); resname=''; end
     warning(['blqmr failed to converge within %d iterations,\nthe final'...
             ' %sresidual was %e\n'],iter,resname,relres);
 end
 
-%% cylic array index
+
+%% ========================================================================
+%  Helper functions
+%% ========================================================================
+
+%% create preconditioner from opt.precond
+function [M1, M2] = create_preconditioner(A, opt)
+M1 = [];
+M2 = [];
+
+precond_type = opt.precond;
+if isstruct(precond_type)
+    ptype = precond_type.type;
+    popts = precond_type;
+else
+    ptype = precond_type;
+    popts = opt;
+end
+
+droptol = 1e-3;
+if isfield(popts, 'droptol')
+    droptol = popts.droptol;
+end
+
+is_complex = ~isreal(A);
+
+try
+    switch lower(ptype)
+        case 'ilu'
+            % ILU(0) - real matrices only, falls back to diagonal for complex
+            if is_complex
+                [M1, M2] = diag_precond(A);
+            else
+                [M1, M2] = ilu(A, struct('type', 'nofill'));
+            end
+        case {'ilutp', 'ilut'}
+            % ILUTP with threshold - real matrices only
+            if is_complex
+                [M1, M2] = diag_precond(A);
+            else
+                [M1, M2] = ilu(A, struct('type', 'ilutp', 'droptol', droptol));
+            end
+        case 'ichol'
+            % Incomplete Cholesky - for SPD matrices only
+            if is_complex
+                [M1, M2] = diag_precond(A);
+            else
+                ichol_opts = struct('type', 'ict', 'droptol', droptol);
+                if isfield(popts, 'michol')
+                    ichol_opts.michol = popts.michol;
+                end
+                L = ichol(A, ichol_opts);
+                M1 = L;
+                M2 = L';
+            end
+        case 'diag'
+            % Diagonal (Jacobi) preconditioner - works for all matrices
+            [M1, M2] = diag_precond(A);
+        otherwise
+            warning('Unknown preconditioner type: %s, using none', ptype);
+    end
+catch ME
+    warning('Preconditioner creation failed: %s\nFalling back to diagonal', ME.message);
+    try
+        [M1, M2] = diag_precond(A);
+    catch
+        warning('Diagonal preconditioner also failed, using none');
+    end
+end
+
+%% diagonal (Jacobi) preconditioner
+function [M1, M2] = diag_precond(A)
+d = diag(A);
+% Handle zero or near-zero diagonal entries
+small_thresh = max(abs(d)) * 1e-14;
+if small_thresh == 0
+    small_thresh = 1e-14;
+end
+small_idx = abs(d) < small_thresh;
+d(small_idx) = 1;
+M1 = spdiags(1./d, 0, size(A,1), size(A,1));
+M2 = [];
+
+%% cyclic array index
 function tnew=cycidx(t,dim)
 tnew=mod(t,dim)+1;
 
-%% compute the cylic indices for all internal arrays
+%% compute the cyclic indices for all internal arrays
 function [t3,t3n,t3p,t3nn]=updateidx(t)
 t3=cycidx(t,3);    % step k
 t3n=cycidx(t-1,3); % step k-1
