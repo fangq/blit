@@ -1,8 +1,8 @@
-function [x,flag,relres,iter,resv]=blqmr(A,B,qtol,maxit,M1,M2,x0,varargin)
+function [x, flag, relres, iter, resv] = blqmr(A, B, qtol, maxit, M1, M2, x0, varargin)
 %
 % [x,flag,relres,iter,resv] = blqmr(A,B,qtol,maxit,M1,M2,x0,opt)
 %
-%   Block Quasi-Minimal-Residual (BL-QMR) iterative solver for sparse 
+%   Block Quasi-Minimal-Residual (BL-QMR) iterative solver for sparse
 %   complex symmetric systems (suited for FEM modeling) in the form of
 %                  A*[x1, x2, ...] = [b1, b2, ...]
 %
@@ -40,7 +40,7 @@ function [x,flag,relres,iter,resv]=blqmr(A,B,qtol,maxit,M1,M2,x0,varargin)
 %                (more robust for complex symmetric systems). Useful for
 %                memory management or avoiding block algorithm instabilities.
 %
-% Output: 
+% Output:
 %      x: the solution, dimension N x Nrhs
 %      flag: if flag=0, blqmr converges below qtol within maxit iterations;
 %            if flag=1, blqmr fails to converge below qtol within maxit;
@@ -51,9 +51,9 @@ function [x,flag,relres,iter,resv]=blqmr(A,B,qtol,maxit,M1,M2,x0,varargin)
 %      resv: the vector of relective residuals for all iterations
 %
 % Examples:
-%      
-%      n=100; 
-%      di=ones(n,1); 
+%
+%      n=100;
+%      di=ones(n,1);
 %      A=spdiags([-di 2*di -di],-1:1,n,n);
 %      b=rand(n,4);
 %      x = blqmr(A,b,[],100);
@@ -66,15 +66,15 @@ function [x,flag,relres,iter,resv]=blqmr(A,B,qtol,maxit,M1,M2,x0,varargin)
 %      [x3,flag,res,iter,resv]=blqmr(A,b,1e-5,1000,R,R');
 %
 % Reference:
-%      Fang Q, Meaney PM, Geimer SD, Streltsov AV, Paulsen KD, "Microwave image 
-%      reconstruction from 3D fields coupled to 2D parameter estimation," IEEE 
+%      Fang Q, Meaney PM, Geimer SD, Streltsov AV, Paulsen KD, "Microwave image
+%      reconstruction from 3D fields coupled to 2D parameter estimation," IEEE
 %      Transactions on Medical Imaging, vol. 23, pp. 475-484, Apr. 2004.
 %
-%      Boyse, W. E., Seidl, A. A. (1996) A block QMR method for computing 
-%      multiple simultaneous solutions to complex symmetric systems. 
+%      Boyse, W. E., Seidl, A. A. (1996) A block QMR method for computing
+%      multiple simultaneous solutions to complex symmetric systems.
 %      SIAM J. Sci. Comput. 17, 263–274.
-% 
-%  -- this file is part of Blit sparse solver library 
+%
+%  -- this file is part of Blit sparse solver library
 %     URL: http://blit.sf.net
 %
 %  License:
@@ -89,15 +89,15 @@ function [x,flag,relres,iter,resv]=blqmr(A,B,qtol,maxit,M1,M2,x0,varargin)
 
 %% initialization of BLQMR
 
-[n,m]=size(B);
+[n, m] = size(B);
 
 % Parse opt structure first
 opt = [];
-if(nargin>7 && ~isempty(varargin{:}))
-   opt=varargin{1};
-   if(~isstruct(opt))
-       error('opt must be a structure');
-   end
+if (nargin > 7 && ~isempty(varargin{:}))
+    opt = varargin{1};
+    if (~isstruct(opt))
+        error('opt must be a structure');
+    end
 end
 
 % Check for blocksize option - solve RHS in batches for robustness/memory
@@ -136,7 +136,7 @@ if blocksize < m
         % Extract batch data
         B_batch = B(:, cols);
         x0_batch = [];
-        if exist('x0','var') && ~isempty(x0)
+        if exist('x0', 'var') && ~isempty(x0)
             x0_batch = x0(:, cols);
         end
 
@@ -148,41 +148,41 @@ if blocksize < m
     flag = max(flags);    % Worst case flag
     relres = max(relress); % Worst case residual
     iter = max(iters);    % Max iterations
-    return;
+    return
 end
 
 % Original block QMR algorithm follows
-znm1=zeros(n,m);
-znm3=zeros(n,m,3);
-zmm1=zeros(m,m);
-zmm3=zeros(m,m,3);
+znm1 = zeros(n, m);
+znm3 = zeros(n, m, 3);
+zmm1 = zeros(m, m);
+zmm3 = zeros(m, m, 3);
 
-[v,   vt,  beta,alpha,omega,theta,Qa,  Qb,  Qc,  Qd]=deal(...
- znm3,znm1,zmm3,zmm1, zmm3, zmm1, zmm3,zmm3,zmm3,zmm3);
+[v,   vt,  beta, alpha, omega, theta, Qa,  Qb,  Qc,  Qd] = deal( ...
+                                                                znm3, znm1, zmm3, zmm1, zmm3, zmm1, zmm3, zmm3, zmm3, zmm3);
 
-[zeta,zetat,eta,tau,taot,p]=deal(zmm1,zmm1,zmm1,zmm1,zmm1,znm3);
+[zeta, zetat, eta, tau, taot, p] = deal(zmm1, zmm1, zmm1, zmm1, zmm1, znm3);
 
-[t3,t3n,t3p]=updateidx(0);
+[t3, t3n, t3p] = updateidx(0);
 
-Qa(:,:,t3)=eye(m);   %eq (35) in [Boyse1996], same below
-Qd(:,:,t3n)=eye(m);
-Qd(:,:,t3)=eye(m);
+Qa(:, :, t3) = eye(m);   % eq (35) in [Boyse1996], same below
+Qd(:, :, t3n) = eye(m);
+Qd(:, :, t3) = eye(m);
 
 %% check input options
 
-isprecond=0;
-if(nargin<3 || (nargin>=3 && isempty(qtol)))
-    qtol=1e-6;
+isprecond = 0;
+if (nargin < 3 || (nargin >= 3 && isempty(qtol)))
+    qtol = 1e-6;
 end
 
-if(nargin<4 || (nargin>=4 && isempty(maxit)))
-    maxit=min(n,20);
+if (nargin < 4 || (nargin >= 4 && isempty(maxit)))
+    maxit = min(n, 20);
 end
 
 % parse opt for residual option
-isquasires=1;
-if ~isempty(opt) && isfield(opt,'residual')
-    isquasires=~opt.residual;
+isquasires = 1;
+if ~isempty(opt) && isfield(opt, 'residual')
+    isquasires = ~opt.residual;
 end
 
 % auto-create preconditioner if opt.precond is set and M1/M2 not provided
@@ -192,14 +192,14 @@ if ~isempty(opt) && isfield(opt, 'precond') && ...
 end
 
 % initialize preconditioner
-if(nargin>=5 && ~isempty(M1))
-    if(nargin>=6 && ~isempty(M2))
-        isprecond=2;
+if (nargin >= 5 && ~isempty(M1))
+    if (nargin >= 6 && ~isempty(M2))
+        isprecond = 2;
         % Split preconditioning: will solve M1^{-1}*A*M2^{-1}*y = M1^{-1}*b
         % and recover x = M2^{-1}*y at the end
     else
-        M=M1;
-        isprecond=1;
+        M = M1;
+        isprecond = 1;
     end
     % Check if M1 is a function handle (for custom preconditioners)
     if isa(M1, 'function_handle')
@@ -207,177 +207,179 @@ if(nargin>=5 && ~isempty(M1))
         precond_func = M1;
     end
 else
-    if(nargin>=6 && ~isempty(M2))
-        fprintf(1,'M2 is ignored as M1 is not given');
+    if (nargin >= 6 && ~isempty(M2))
+        fprintf(1, 'M2 is ignored as M1 is not given');
     end
 end
 
 % initialize initial guess
-if(~exist('x0','var') || isempty(x0))
-    x0=zeros(size(B));
+if (~exist('x0', 'var') || isempty(x0))
+    x0 = zeros(size(B));
 end
-x=x0;
-iter=0;
-relres=1;
+x = x0;
+iter = 0;
+relres = 1;
 
 % vt0 contains the initial true residual
-if(isprecond)
-    if(isprecond==3)
-        vt = precond_func(B-A*x0);
-    elseif(isprecond==2)
+if (isprecond)
+    if (isprecond == 3)
+        vt = precond_func(B - A * x0);
+    elseif (isprecond == 2)
         % Split preconditioning: transform to preconditioned space
         % We solve M1^{-1}*A*M2^{-1}*y = M1^{-1}*b where y = M2*x
         % Initial y0 = M2*x0, initial residual = M1^{-1}*b - M1^{-1}*A*M2^{-1}*y0
         %                                      = M1^{-1}*(b - A*x0)
-        vt = M1\(B-A*x0);
+        vt = M1 \ (B - A * x0);
     else
-        vt=M\(B-A*x0);
+        vt = M \ (B - A * x0);
     end
-    if(any(isnan(vt(:))))
-        flag=2;
-        resv=[];
-        if(nargout<=1)
-          fprintf('the preconditioner is rank-deficient, blqmr stops\n');
+    if (any(isnan(vt(:))))
+        flag = 2;
+        resv = [];
+        if (nargout <= 1)
+            fprintf('the preconditioner is rank-deficient, blqmr stops\n');
         end
-        return;
+        return
     end
 else
-    vt=B-A*x0;
+    vt = B - A * x0;
 end
 
-[Q,R]=qqr(vt,0); % quasi-qr decomposition,    %eq (37)
-v(:,:,t3p)=Q;
-beta(:,:,t3p)=R;
+[Q, R] = qqr(vt, 0); % quasi-qr decomposition,    %eq (37)
+v(:, :, t3p) = Q;
+beta(:, :, t3p) = R;
 
-omega(:,:,t3p)=diag(sqrt(sum(conj(Q).*Q,1))); %eq (38)
-taot=omega(:,:,t3p)*beta(:,:,t3p);            %eq (39)
+omega(:, :, t3p) = diag(sqrt(sum(conj(Q) .* Q, 1))); % eq (38)
+taot = omega(:, :, t3p) * beta(:, :, t3p);            % eq (39)
 
 % calculate the initial residual
-if(isquasires)
-   Qres0=max(sqrt(sum(conj(taot).*taot,1)));  %eq (31)
+if (isquasires)
+    Qres0 = max(sqrt(sum(conj(taot) .* taot, 1)));  % eq (31)
 else
-   omegat=Q*diag(1./diag(omega(:,:,t3p)));
-   % R=(omegat*taot);
-   % proof R==vt: omegat*taot=Q*inv(omega)*omega*beta=Q*R=vt
-   Qres0=max(sqrt(sum(conj(vt).*vt,1)));      %eq (32)
+    omegat = Q * diag(1 ./ diag(omega(:, :, t3p)));
+    % R=(omegat*taot);
+    % proof R==vt: omegat*taot=Q*inv(omega)*omega*beta=Q*R=vt
+    Qres0 = max(sqrt(sum(conj(vt) .* vt, 1)));      % eq (32)
 end
 
 %% start iterative solving process
 
-flag=1;
-resv=zeros(maxit,1);
+flag = 1;
+resv = zeros(maxit, 1);
 
-for k=1:maxit
-    [t3,t3n,t3p,t3nn]=updateidx(k);
-    if(isprecond)
-       if(isprecond==3)
-           vt = precond_func(A*v(:,:,t3)) - v(:,:,t3n)*beta(:,:,t3).';
-       elseif(isprecond==2)
-           % Split preconditioning: apply M1^{-1} * A * M2^{-1}
-           tmp = M2\v(:,:,t3);      % M2^{-1} * v
-           tmp = A*tmp;              % A * M2^{-1} * v
-           tmp = M1\tmp;             % M1^{-1} * A * M2^{-1} * v
-           vt = tmp - v(:,:,t3n)*beta(:,:,t3).';
-       else
-           vt=M\(A*v(:,:,t3))-v(:,:,t3n)*beta(:,:,t3).';
-       end
+for k = 1:maxit
+    [t3, t3n, t3p, t3nn] = updateidx(k);
+    if (isprecond)
+        if (isprecond == 3)
+            vt = precond_func(A * v(:, :, t3)) - v(:, :, t3n) * beta(:, :, t3).';
+        elseif (isprecond == 2)
+            % Split preconditioning: apply M1^{-1} * A * M2^{-1}
+            tmp = M2 \ v(:, :, t3);      % M2^{-1} * v
+            tmp = A * tmp;              % A * M2^{-1} * v
+            tmp = M1 \ tmp;             % M1^{-1} * A * M2^{-1} * v
+            vt = tmp - v(:, :, t3n) * beta(:, :, t3).';
+        else
+            vt = M \ (A * v(:, :, t3)) - v(:, :, t3n) * beta(:, :, t3).';
+        end
     else
-       vt=(A*v(:,:,t3))-v(:,:,t3n)*beta(:,:,t3).';
+        vt = (A * v(:, :, t3)) - v(:, :, t3n) * beta(:, :, t3).';
     end
-    alpha=v(:,:,t3).'*vt;  % eq (41)
-    vt=vt-v(:,:,t3)*alpha; % eq (42)
+    alpha = v(:, :, t3).' * vt;  % eq (41)
+    vt = vt - v(:, :, t3) * alpha; % eq (42)
 
     % Check for quasi-norm breakdown (can happen in complex symmetric systems)
     % quasi-norm = sqrt(sum(vt.*vt)) can be zero even if ||vt||_2 is not
-    vt_quasi_norm_sq = sum(vt.*vt, 1);  % No conjugate - quasi inner product
+    vt_quasi_norm_sq = sum(vt .* vt, 1);  % No conjugate - quasi inner product
     if any(abs(vt_quasi_norm_sq) < 1e-28)
         % Near breakdown - algorithm has essentially converged or stagnated
         flag = 3;
         iter = k;
-        break;
+        break
     end
 
-    [Q,R]=qqr(vt,0);       % eq (43), quasi-qr decomposition
-    v(:,:,t3p)=Q;
-    beta(:,:,t3p)=R;
-    omega(:,:,t3p)=diag(sqrt(sum(conj(Q).*Q,1))); % eq (44)
-    tmp0=omega(:,:,t3n)*beta(:,:,t3).';
-    theta=Qb(:,:,t3nn)*tmp0; % eq (45)
-    tmp1= Qd(:,:,t3nn)*tmp0;
-    tmp2= omega(:,:,t3)*alpha;
-    eta=  Qa(:,:,t3n)*tmp1+Qb(:,:,t3n)*tmp2; % eq (46)
-    zetat=Qc(:,:,t3n)*tmp1+Qd(:,:,t3n)*tmp2; % eq (47)
+    [Q, R] = qqr(vt, 0);       % eq (43), quasi-qr decomposition
+    v(:, :, t3p) = Q;
+    beta(:, :, t3p) = R;
+    omega(:, :, t3p) = diag(sqrt(sum(conj(Q) .* Q, 1))); % eq (44)
+    tmp0 = omega(:, :, t3n) * beta(:, :, t3).';
+    theta = Qb(:, :, t3nn) * tmp0; % eq (45)
+    tmp1 = Qd(:, :, t3nn) * tmp0;
+    tmp2 = omega(:, :, t3) * alpha;
+    eta =  Qa(:, :, t3n) * tmp1 + Qb(:, :, t3n) * tmp2; % eq (46)
+    zetat = Qc(:, :, t3n) * tmp1 + Qd(:, :, t3n) * tmp2; % eq (47)
 
-    [QQ,zeta]=qr([zetat ; omega(:,:,t3p)*beta(:,:,t3p)]);  % eq (48)
-    zeta=zeta(1:m,1:m);
-    QQ=QQ'; % QQ is an orthogonal matrix, thus, Q'=inv(Q), here is 1 of the 2
-            % places need congugate transpose
+    [QQ, zeta] = qr([zetat; omega(:, :, t3p) * beta(:, :, t3p)]);  % eq (48)
+    zeta = zeta(1:m, 1:m);
+    QQ = QQ'; % QQ is an orthogonal matrix, thus, Q'=inv(Q), here is 1 of the 2
+    % places need congugate transpose
 
-    Qa(:,:,t3)=QQ(1:m,1:m);
-    Qb(:,:,t3)=QQ(1:m,m+1:2*m);
-    Qc(:,:,t3)=QQ(m+1:2*m,1:m);
-    Qd(:,:,t3)=QQ(m+1:2*m,m+1:2*m);
+    Qa(:, :, t3) = QQ(1:m, 1:m);
+    Qb(:, :, t3) = QQ(1:m, m + 1:2 * m);
+    Qc(:, :, t3) = QQ(m + 1:2 * m, 1:m);
+    Qd(:, :, t3) = QQ(m + 1:2 * m, m + 1:2 * m);
 
     % Check zeta before inversion to detect breakdown
     zeta_diag = diag(zeta);
     if any(abs(zeta_diag) < 1e-14) || any(~isfinite(zeta_diag))
         flag = 3;  % stagnated/breakdown
         iter = k;
-        break;
+        break
     end
 
     % Use pseudo-inverse if zeta is ill-conditioned (like Python version)
     zeta_rcond = rcond(zeta);
     if zeta_rcond < 1e-14
         % Fall back to pseudo-inverse for robustness
-        p(:,:,t3)=(v(:,:,t3)-p(:,:,t3n)*eta-p(:,:,t3nn)*theta)*pinv(zeta);
+        p(:, :, t3) = (v(:, :, t3) - p(:, :, t3n) * eta - p(:, :, t3nn) * theta) * pinv(zeta);
     else
-        p(:,:,t3)=(v(:,:,t3)-p(:,:,t3n)*eta-p(:,:,t3nn)*theta)/zeta; % eq (49)
+        p(:, :, t3) = (v(:, :, t3) - p(:, :, t3n) * eta - p(:, :, t3nn) * theta) / zeta; % eq (49)
     end
 
-    tau=Qa(:,:,t3)*taot;  % eq (50)
-    x=x+p(:,:,t3)*tau;    % eq (51)
-    taot=Qc(:,:,t3)*taot; % eq (52)
+    tau = Qa(:, :, t3) * taot;  % eq (50)
+    x = x + p(:, :, t3) * tau;    % eq (51)
+    taot = Qc(:, :, t3) * taot; % eq (52)
 
     % calculate residual and terminate if converge
-    if(isquasires)
-       Qres=max(sqrt(sum(conj(taot).*taot,1))); %eq (31)
+    if (isquasires)
+        Qres = max(sqrt(sum(conj(taot) .* taot, 1))); % eq (31)
     else
-       omegat=omegat*Qc(:,:,t3)'+v(:,:,t3p)*(Qd(:,:,t3)*diag(1./diag(omega(:,:,t3p))))';
-       R=omegat*taot; %R is the residual, R==B-A*x;
-       Qres=max(sqrt(sum(conj(R).*R,1))); % error is the max column norm
+        omegat = omegat * Qc(:, :, t3)' + v(:, :, t3p) * (Qd(:, :, t3) * diag(1 ./ diag(omega(:, :, t3p))))';
+        R = omegat * taot; % R is the residual, R==B-A*x;
+        Qres = max(sqrt(sum(conj(R) .* R, 1))); % error is the max column norm
     end
-    resv(k)=Qres;
-    if(k>1 && Qres==Qres1)
-       flag=3; % stagnated
-       iter=k;
-       break;
+    resv(k) = Qres;
+    if (k > 1 && Qres == Qres1)
+        flag = 3; % stagnated
+        iter = k;
+        break
     end
-    Qres1=Qres;
-    relres=Qres/Qres0;
-    iter=k;
-    if(relres <= qtol)
-       flag=0;
-       if(nargout<=1)
-         fprintf(['blqmr converged at iteration %d with a relative ' ...
-                 'quasi-residual %e\n'],iter,relres);
-       end
-       break;
+    Qres1 = Qres;
+    relres = Qres / Qres0;
+    iter = k;
+    if (relres <= qtol)
+        flag = 0;
+        if (nargout <= 1)
+            fprintf(['blqmr converged at iteration %d with a relative ' ...
+                     'quasi-residual %e\n'], iter, relres);
+        end
+        break
     end
 end
-resv=resv(1:k);
+resv = resv(1:k);
 
-if((flag==1 || flag==3) && nargout<=1)
-    resname='quasi-';
-    if(isquasires==0); resname=''; end
+if ((flag == 1 || flag == 3) && nargout <= 1)
+    resname = 'quasi-';
+    if (isquasires == 0)
+        resname = '';
+    end
     warning(['blqmr failed to converge within %d iterations,\nthe final'...
-            ' %sresidual was %e\n'],iter,resname,relres);
+             ' %sresidual was %e\n'], iter, resname, relres);
 end
 
 % For split preconditioning, recover x = M2^{-1} * y
 % The iteration computed y where y = M2*x, so x = M2\y
-if(isprecond==2)
-    x = M2\x;
+if (isprecond == 2)
+    x = M2 \ x;
 end
 
 %% ========================================================================
@@ -463,16 +465,16 @@ if small_thresh == 0
 end
 small_idx = abs(d) < small_thresh;
 d(small_idx) = 1;
-M1 = spdiags(1./d, 0, size(A,1), size(A,1));
+M1 = spdiags(1 ./ d, 0, size(A, 1), size(A, 1));
 M2 = [];
 
 %% cyclic array index
-function tnew=cycidx(t,dim)
-tnew=mod(t,dim)+1;
+function tnew = cycidx(t, dim)
+tnew = mod(t, dim) + 1;
 
 %% compute the cyclic indices for all internal arrays
-function [t3,t3n,t3p,t3nn]=updateidx(t)
-t3=cycidx(t,3);    % step k
-t3n=cycidx(t-1,3); % step k-1
-t3p=cycidx(t+1,3); % step k+1
-t3nn=cycidx(t-2,3);% step k-2
+function [t3, t3n, t3p, t3nn] = updateidx(t)
+t3 = cycidx(t, 3);    % step k
+t3n = cycidx(t - 1, 3); % step k-1
+t3p = cycidx(t + 1, 3); % step k+1
+t3nn = cycidx(t - 2, 3); % step k-2
