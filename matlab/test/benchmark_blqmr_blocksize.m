@@ -396,7 +396,6 @@ zr = [min(node(:, 3)), max(node(:, 3))];
 
 ns = ceil(nrhs^(1 / 3));
 cnt = 0;
-p;
 src_pos = zeros(nrhs, 3);
 
 for iz = 1:ns
