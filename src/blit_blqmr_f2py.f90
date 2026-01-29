@@ -21,26 +21,26 @@
 !> @param[in]  maxit    Maximum iterations
 !> @param[in]  qtol     Convergence tolerance
 !> @param[in]  droptol  ILU drop tolerance
-!> @param[in]  dopcond  Use preconditioner (1=yes, 0=no)
+!> @param[in]  pcond_type  Use preconditioner (1=yes, 0=no)
 !> @param[out] flag     Convergence flag (0=success)
 !> @param[out] iter     Iterations performed
 !> @param[out] relres   Relative residual
 
 subroutine blqmr_solve_real(n, nnz, Ap, Ai, Ax, b, x, &
-                            maxit, qtol, droptol, dopcond, &
+                            maxit, qtol, droptol, pcond_type, &
                             flag, iter, relres)
     use blit_precision
     use blit_blqmr_real
     implicit none
 
-    !f2py intent(in) n, nnz, maxit, dopcond
+    !f2py intent(in) n, nnz, maxit, pcond_type
     !f2py intent(in) qtol, droptol
     !f2py intent(in) Ap, Ai, Ax, b
     !f2py intent(out) x, flag, iter, relres
     !f2py depend(n) Ap, b, x
     !f2py depend(nnz) Ai, Ax
 
-    integer, intent(in) :: n, nnz, maxit, dopcond
+    integer, intent(in) :: n, nnz, maxit, pcond_type
     real(kind=Kdouble), intent(in) :: qtol, droptol
     integer, intent(in) :: Ap(n+1), Ai(nnz)
     real(kind=Kdouble), intent(in) :: Ax(nnz), b(n)
@@ -66,7 +66,7 @@ subroutine blqmr_solve_real(n, nnz, Ap, Ai, Ax, b, x, &
     qmr%maxit = maxit
     qmr%qtol = qtol
     qmr%droptol = droptol
-    qmr%dopcond = dopcond
+    qmr%pcond_type = pcond_type
     qmr%isquasires = 0
 
     ! Prepare preconditioner and solve
@@ -88,13 +88,13 @@ end subroutine blqmr_solve_real
 !> @brief Solve sparse system AX = B (multiple RHS) - F2PY interface
 
 subroutine blqmr_solve_real_multi(n, nnz, nrhs, Ap, Ai, Ax, B, X, &
-                                   maxit, qtol, droptol, dopcond, &
+                                   maxit, qtol, droptol, pcond_type, &
                                    flag, iter, relres)
     use blit_precision
     use blit_blqmr_real
     implicit none
 
-    !f2py intent(in) n, nnz, nrhs, maxit, dopcond
+    !f2py intent(in) n, nnz, nrhs, maxit, pcond_type
     !f2py intent(in) qtol, droptol
     !f2py intent(in) Ap, Ai, Ax, B
     !f2py intent(out) X, flag, iter, relres
@@ -102,7 +102,7 @@ subroutine blqmr_solve_real_multi(n, nnz, nrhs, Ap, Ai, Ax, B, X, &
     !f2py depend(nnz) Ai, Ax
     !f2py depend(n,nrhs) B, X
 
-    integer, intent(in) :: n, nnz, nrhs, maxit, dopcond
+    integer, intent(in) :: n, nnz, nrhs, maxit, pcond_type
     real(kind=Kdouble), intent(in) :: qtol, droptol
     integer, intent(in) :: Ap(n+1), Ai(nnz)
     real(kind=Kdouble), intent(in) :: Ax(nnz), B(n, nrhs)
@@ -128,7 +128,7 @@ subroutine blqmr_solve_real_multi(n, nnz, nrhs, Ap, Ai, Ax, B, X, &
     qmr%maxit = maxit
     qmr%qtol = qtol
     qmr%droptol = droptol
-    qmr%dopcond = dopcond
+    qmr%pcond_type = pcond_type
     qmr%isquasires = 0
 
     ! Solve
@@ -150,20 +150,20 @@ end subroutine blqmr_solve_real_multi
 !> @brief Solve complex sparse system (single RHS)
 
 subroutine blqmr_solve_complex(n, nnz, Ap, Ai, Ax, b, x, &
-                               maxit, qtol, droptol, dopcond, &
+                               maxit, qtol, droptol, pcond_type, &
                                flag, iter, relres)
     use blit_precision
     use blit_blqmr_complex
     implicit none
 
-    !f2py intent(in) n, nnz, maxit, dopcond
+    !f2py intent(in) n, nnz, maxit, pcond_type
     !f2py intent(in) qtol, droptol
     !f2py intent(in) Ap, Ai, Ax, b
     !f2py intent(out) x, flag, iter, relres
     !f2py depend(n) Ap, b, x
     !f2py depend(nnz) Ai, Ax
 
-    integer, intent(in) :: n, nnz, maxit, dopcond
+    integer, intent(in) :: n, nnz, maxit, pcond_type
     real(kind=Kdouble), intent(in) :: qtol, droptol
     integer, intent(in) :: Ap(n+1), Ai(nnz)
     complex(kind=Kdouble), intent(in) :: Ax(nnz), b(n)
@@ -188,7 +188,7 @@ subroutine blqmr_solve_complex(n, nnz, Ap, Ai, Ax, b, x, &
     qmr%maxit = maxit
     qmr%qtol = qtol
     qmr%droptol = droptol
-    qmr%dopcond = dopcond
+    qmr%pcond_type = pcond_type
     qmr%isquasires = 0
 
     call BLQMRPrep(qmr, Ap_local, Ai_local, Ax_local, nnz_local)
@@ -207,13 +207,13 @@ end subroutine blqmr_solve_complex
 !> @brief Solve complex sparse system AX = B (multiple RHS) - F2PY interface
 
 subroutine blqmr_solve_complex_multi(n, nnz, nrhs, Ap, Ai, Ax, B, X, &
-                                      maxit, qtol, droptol, dopcond, &
+                                      maxit, qtol, droptol, pcond_type, &
                                       flag, iter, relres)
     use blit_precision
     use blit_blqmr_complex
     implicit none
 
-    !f2py intent(in) n, nnz, nrhs, maxit, dopcond
+    !f2py intent(in) n, nnz, nrhs, maxit, pcond_type
     !f2py intent(in) qtol, droptol
     !f2py intent(in) Ap, Ai, Ax, B
     !f2py intent(out) X, flag, iter, relres
@@ -221,7 +221,7 @@ subroutine blqmr_solve_complex_multi(n, nnz, nrhs, Ap, Ai, Ax, B, X, &
     !f2py depend(nnz) Ai, Ax
     !f2py depend(n,nrhs) B, X
 
-    integer, intent(in) :: n, nnz, nrhs, maxit, dopcond
+    integer, intent(in) :: n, nnz, nrhs, maxit, pcond_type
     real(kind=Kdouble), intent(in) :: qtol, droptol
     integer, intent(in) :: Ap(n+1), Ai(nnz)
     complex(kind=Kdouble), intent(in) :: Ax(nnz), B(n, nrhs)
@@ -248,7 +248,7 @@ subroutine blqmr_solve_complex_multi(n, nnz, nrhs, Ap, Ai, Ax, B, X, &
     qmr%maxit = maxit
     qmr%qtol = qtol
     qmr%droptol = droptol
-    qmr%dopcond = dopcond
+    qmr%pcond_type = pcond_type
     qmr%isquasires = 0
 
     ! Solve with multiple RHS (true block method)

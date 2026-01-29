@@ -7,7 +7,7 @@ python module _blqmr
     interface
 
         subroutine blqmr_solve_real(n, nnz, Ap, Ai, Ax, b, x, &
-                                    maxit, qtol, droptol, dopcond, &
+                                    maxit, qtol, droptol, pcond_type, &
                                     flag, iter, relres)
             ! Solve sparse real system Ax = b
             integer, intent(in) :: n
@@ -20,14 +20,14 @@ python module _blqmr
             integer, intent(in) :: maxit
             real*8, intent(in) :: qtol
             real*8, intent(in) :: droptol
-            integer, intent(in) :: dopcond
+            integer, intent(in) :: pcond_type
             integer, intent(out) :: flag
             integer, intent(out) :: iter
             real*8, intent(out) :: relres
         end subroutine blqmr_solve_real
 
         subroutine blqmr_solve_real_multi(n, nnz, nrhs, Ap, Ai, Ax, B, X, &
-                                          maxit, qtol, droptol, dopcond, &
+                                          maxit, qtol, droptol, pcond_type, &
                                           flag, iter, relres)
             ! Solve sparse real system AX = B with multiple RHS
             integer, intent(in) :: n
@@ -41,14 +41,14 @@ python module _blqmr
             integer, intent(in) :: maxit
             real*8, intent(in) :: qtol
             real*8, intent(in) :: droptol
-            integer, intent(in) :: dopcond
+            integer, intent(in) :: pcond_type
             integer, intent(out) :: flag
             integer, intent(out) :: iter
             real*8, intent(out) :: relres
         end subroutine blqmr_solve_real_multi
 
         subroutine blqmr_solve_complex(n, nnz, Ap, Ai, Ax, b, x, &
-                                       maxit, qtol, droptol, dopcond, &
+                                       maxit, qtol, droptol, pcond_type, &
                                        flag, iter, relres)
             ! Solve sparse complex system Ax = b
             integer, intent(in) :: n
@@ -61,14 +61,14 @@ python module _blqmr
             integer, intent(in) :: maxit
             real*8, intent(in) :: qtol
             real*8, intent(in) :: droptol
-            integer, intent(in) :: dopcond
+            integer, intent(in) :: pcond_type
             integer, intent(out) :: flag
             integer, intent(out) :: iter
             real*8, intent(out) :: relres
         end subroutine blqmr_solve_complex
 
         subroutine blqmr_solve_complex_multi(n, nnz, nrhs, Ap, Ai, Ax, B, X, &
-                                                 maxit, qtol, droptol, dopcond, &
+                                                 maxit, qtol, droptol, pcond_type, &
                                                  flag, iter, relres)
             ! Solve sparse complex system AX = B with multiple RHS
             integer, intent(in) :: n
@@ -82,7 +82,7 @@ python module _blqmr
             integer, intent(in) :: maxit
             real*8, intent(in) :: qtol
             real*8, intent(in) :: droptol
-            integer, intent(in) :: dopcond
+            integer, intent(in) :: pcond_type
             integer, intent(out) :: flag
             integer, intent(out) :: iter
             real*8, intent(out) :: relres

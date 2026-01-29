@@ -46,10 +46,12 @@ module blit_blqmr_real
         interface BLQMRDestroy; module procedure BLQMROnDestroy; end interface
 
         type, bind(c) :: BLQMRSolver
-                integer(c_int) :: n, nrhs, maxit, state, dopcond, flag, iter, isquasires, debug
-                real(c_double) :: qtol, droptol, res, relres ! convergence tolerance
-                type (ILUPcond) :: ilu ! private ILU preconditioner
+                integer(c_int) :: n, nrhs, maxit, state, flag, iter, isquasires, debug
+                integer(c_int) :: pcond_type  ! NEW: 0=none, 1=ILU-left, 2=ILU-split, 3=Jacobi-split
+                real(c_double) :: qtol, droptol, res, relres
+                type (ILUPcond) :: ilu
         end type BLQMRSolver
+        real(kind=Kdouble), allocatable :: jacobi_sqrt_diag(:)
 save
 
 
@@ -84,10 +86,12 @@ module blit_blqmr_complex
         interface BLQMRDestroy; module procedure BLQMROnDestroy; end interface
 
         type, bind(c) :: BLQMRSolver
-                integer(c_int) :: n, nrhs, maxit, state, dopcond, flag, iter, isquasires, debug
-                real(c_double) :: qtol, droptol, res, relres ! convergence tolerance
-                type (ILUPcond) :: ilu ! private ILU preconditioner
+                integer(c_int) :: n, nrhs, maxit, state, flag, iter, isquasires, debug
+                integer(c_int) :: pcond_type  ! NEW: 0=none, 1=ILU-left, 2=ILU-split, 3=Jacobi-split
+                real(c_double) :: qtol, droptol, res, relres
+                type (ILUPcond) :: ilu
         end type BLQMRSolver
+        complex(kind=Kdouble), allocatable :: jacobi_sqrt_diag(:)
 save
 
 contains
@@ -128,7 +132,7 @@ implicit none
 
        qmr%maxit=100
        qmr%qtol=1e-5_Kdouble
-       qmr%dopcond=1
+       qmr%pcond_type=1
        qmr%droptol=0.0001_Kdouble
        qmr%isquasires=0
 

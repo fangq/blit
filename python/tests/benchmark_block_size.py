@@ -352,7 +352,7 @@ def solve_native_blqmr_block(A, B_all, block_size, tol=1e-8, maxiter=None, M1=No
 
 
 def solve_fortran_blqmr_block(
-    A, B_all, block_size, tol=1e-8, maxiter=None, use_precond=False
+    A, B_all, block_size, tol=1e-8, maxiter=None, precond_type=False
 ):
     """Solve all RHS using Fortran BLQMR with given block size."""
     if not BLQMR_EXT:
@@ -385,7 +385,7 @@ def solve_fortran_blqmr_block(
                     maxiter=maxiter,
                     x0=None,
                     droptol=0.001,
-                    use_precond=use_precond,
+                    precond_type=precond_type,
                 )
                 X_all[:, start_col:end_col] = result.x.reshape(-1, end_col - start_col)
                 total_iters += result.iter
@@ -435,7 +435,7 @@ def run_benchmark(
             fortran_times = []
             for _ in range(n_runs):
                 elapsed, x, flag, avg_iter, n_blocks = solve_fortran_blqmr_block(
-                    A, B_all, bs, tol, maxiter, use_precond=False
+                    A, B_all, bs, tol, maxiter, precond_type=False
                 )
                 if elapsed is not None:
                     fortran_times.append(elapsed)

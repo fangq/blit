@@ -33,7 +33,7 @@ implicit none
 
         private
         public :: ILUPcond, ILUPcondCreate, ILUPcondDestroy, &
-                  ILUPcondPrep, ILUPcondSolve
+                  ILUPcondPrep, ILUPcondSolve, ILUPcondSolveL, ILUPcondSolveU
 
         integer,parameter :: UMFP_DROPTOL = 19
 
@@ -168,6 +168,80 @@ contains
         endif
 
         end subroutine ILUPcondSolve
+
+!--------------------------------------------------------------------------
+!> \fn ILUPcondSolveL(this,Ap,Ai,Ax,rows,cols,x,b,Az,xz,bz)
+!> \brief Solve L*x = Pb (lower triangular solve with row permutation)
+!>
+!> UMFPACK factorizes as P*A*Q = L*U where P,Q are permutation matrices.
+!> sys=3 solves: L*x = P*b (applies row permutation, then L solve)
+!--------------------------------------------------------------------------
+
+        subroutine ILUPcondSolveL(this,Ap,Ai,Ax,rows,cols,x,b,Az,xz,bz)
+        implicit none
+        type(ILUPcond), intent(inout) :: this
+        integer :: i, sys, rows, cols, Ap(this%n+1), Ai(this%nz)
+        real(kind=Kdouble),intent(out) :: x(rows, cols)
+        real(kind=Kdouble),intent(in)  :: b(rows, cols), Ax(this%nz)
+        real(kind=Kdouble),dimension(90)   :: info
+        real(kind=Kdouble),optional,intent(in)  :: Az(this%nz), bz(rows, cols)
+        real(kind=Kdouble),optional,intent(out) :: xz(rows, cols)
+
+        ! UMFPACK sys values for triangular solves:
+        !   sys=3: solve P'Lx = b  =>  Lx = Pb  (L solve with row perm)
+        !   sys=4: solve L'Px = b  (L' solve)
+        !   sys=5: solve L.'Px = b (L.' solve, for complex)
+        sys = 3  ! Solve Lx = Pb
+        
+        do i=1, cols
+            if(.not. present(bz)) then
+                call umf4solr(sys, Ap-1, Ai-1, Ax, x(:,i), b(:,i), this%numeric, this%control, info)
+            else
+                call zumf4solr(sys, Ap-1, Ai-1, Ax, Az, x(:,i), xz(:,i), b(:,i), bz(:,i), this%numeric, this%control, info)
+            endif
+        enddo
+        if (info(1) < 0) then
+            print *, "Error in ILUPcondSolveL (sys=3): ", info(1)
+        endif
+        
+        end subroutine ILUPcondSolveL
+
+!--------------------------------------------------------------------------
+!> \fn ILUPcondSolveU(this,Ap,Ai,Ax,rows,cols,x,b,Az,xz,bz)
+!> \brief Solve U*Q'*x = b (upper triangular solve with column permutation)
+!>
+!> UMFPACK factorizes as P*A*Q = L*U where P,Q are permutation matrices.
+!> sys=6 solves: U*Q'*x = b (U solve, then applies column permutation)
+!--------------------------------------------------------------------------
+
+        subroutine ILUPcondSolveU(this,Ap,Ai,Ax,rows,cols,x,b,Az,xz,bz)
+        implicit none
+        type(ILUPcond), intent(inout) :: this
+        integer :: i, sys, rows, cols, Ap(this%n+1), Ai(this%nz)
+        real(kind=Kdouble),intent(out) :: x(rows, cols)
+        real(kind=Kdouble),intent(in)  :: b(rows, cols), Ax(this%nz)
+        real(kind=Kdouble),dimension(90)   :: info
+        real(kind=Kdouble),optional,intent(in)  :: Az(this%nz), bz(rows, cols)
+        real(kind=Kdouble),optional,intent(out) :: xz(rows, cols)
+
+        ! UMFPACK sys values for triangular solves:
+        !   sys=6: solve UQ'x = b  (U solve with col perm)
+        !   sys=7: solve QU'x = b  (U' solve)
+        !   sys=8: solve QU.'x = b (U.' solve, for complex)
+        sys = 6  ! Solve UQ'x = b
+        
+        do i=1, cols
+            if(.not. present(bz)) then
+                call umf4solr(sys, Ap-1, Ai-1, Ax, x(:,i), b(:,i), this%numeric, this%control, info)
+            else
+                call zumf4solr(sys, Ap-1, Ai-1, Ax, Az, x(:,i), xz(:,i), b(:,i), bz(:,i), this%numeric, this%control, info)
+            endif
+        enddo
+        if (info(1) < 0) then
+            print *, "Error in ILUPcondSolveU (sys=6): ", info(1)
+        endif
+        
+        end subroutine ILUPcondSolveU
 
 end module blit_ilupcond
 

@@ -437,8 +437,101 @@ class BLQMRWorkspace:
 # Preconditioner Factory
 # =============================================================================
 
+# Type alias for precond_type
+PrecondType = Optional[Union[str, int]]
 
-def make_preconditioner(A: sparse.spmatrix, precond_type: str = "diag", **kwargs):
+
+def _parse_precond_type_for_fortran(precond_type: PrecondType) -> int:
+    """
+    Convert precond_type to Fortran integer code.
+
+    Returns
+    -------
+    int
+        0 = no preconditioning
+        2 = ILU
+        3 = diagonal/Jacobi
+    """
+    if precond_type is None or precond_type == "" or precond_type is False:
+        return 0
+
+    if isinstance(precond_type, int):
+        return precond_type
+
+    if isinstance(precond_type, str):
+        precond_lower = precond_type.lower()
+        if precond_lower in ("ilu", "ilu0", "ilut"):
+            return 2
+        elif precond_lower in ("diag", "jacobi"):
+            return 3
+        else:
+            # Unknown string, default to no preconditioning
+            warnings.warn(
+                f"Unknown precond_type '{precond_type}' for Fortran backend, using no preconditioning"
+            )
+            return 0
+
+    return 0
+
+
+def _get_preconditioner_for_native(A, precond_type: PrecondType, M1_provided):
+    """
+    Create preconditioner for native Python backend.
+
+    Parameters
+    ----------
+    A : sparse matrix
+        System matrix
+    precond_type : None, '', str, or int
+        Preconditioner type specification
+    M1_provided : preconditioner or None
+        User-provided preconditioner (takes precedence)
+
+    Returns
+    -------
+    M1 : preconditioner or None
+    """
+    # If user provided M1, use it
+    if M1_provided is not None:
+        return M1_provided
+
+    # No preconditioning requested
+    if precond_type is None or precond_type == "" or precond_type is False:
+        return None
+
+    # Integer codes (for compatibility)
+    if isinstance(precond_type, int):
+        if precond_type == 0:
+            return None
+        elif precond_type == 2:
+            precond_str = "ilu"
+        elif precond_type == 3:
+            precond_str = "diag"
+        else:
+            precond_str = "ilu"  # Default to ILU for other integers
+    else:
+        precond_str = precond_type
+
+    # Create preconditioner
+    try:
+        return make_preconditioner(A, precond_str)
+    except Exception as e:
+        # Fallback chain: try diag if ilu fails
+        if precond_str not in ("diag", "jacobi"):
+            try:
+                warnings.warn(
+                    f"Preconditioner '{precond_str}' failed: {e}, falling back to diagonal"
+                )
+                return make_preconditioner(A, "diag")
+            except Exception:
+                pass
+        warnings.warn(f"All preconditioners failed, proceeding without preconditioning")
+        return None
+
+
+def make_preconditioner(
+    A: sparse.spmatrix, precond_type: str = "diag", split: bool = False, **kwargs
+):
     """
     Create a preconditioner for iterative solvers.
 
@@ -449,25 +542,32 @@ def make_preconditioner(A: sparse.spmatrix, precond_type: str = "diag", **kwargs
     precond_type : str
         'diag' or 'jacobi': Diagonal (Jacobi) preconditioner
         'ilu' or 'ilu0': Incomplete LU with minimal fill
-        'ilut': Incomplete LU with threshold (better quality)
-        'lu': Full LU factorization (exact, use as reference)
-        'ssor': Symmetric SOR
+        'ilut': Incomplete LU with threshold
+        'lu': Full LU factorization
+    split : bool
+        If True, return sqrt(D) for split preconditioning (M1=M2=sqrt(D))
+        If False, return D for left preconditioning
     **kwargs : dict
-        Additional parameters for ILU:
-        - drop_tol: Drop tolerance (default: 1e-4 for ilut, 0 for ilu0)
-        - fill_factor: Fill factor (default: 10 for ilut, 1 for ilu0)
+        Additional parameters
 
     Returns
     -------
     M : preconditioner object
-        Preconditioner (use as M1 in blqmr)
+        For split Jacobi, use as: blqmr(A, b, M1=M, M2=M)
     """
     if precond_type in ("diag", "jacobi"):
         diag = A.diagonal().copy()
         diag[np.abs(diag) < 1e-14] = 1.0
-        return sparse.diags(
-            1.0 / diag, format="csr"
-        )  # Return inverse for preconditioning!
+
+        if split:
+            # For split preconditioning: return sqrt(D)
+            # Usage: M1 = M2 = sqrt(D), gives D^{-1/2} A D^{-1/2}
+            sqrt_diag = np.sqrt(diag)
+            return sparse.diags(sqrt_diag, format="csr")
+        else:
+            # For left preconditioning: return D
+            # Usage: M1 = D, M2 = None, gives D^{-1} A
+            return sparse.diags(diag, format="csr")
 
     elif precond_type == "ilu0":
         # ILU(0) - no fill-in, fast but may be poor quality
@@ -569,19 +669,43 @@ def _blqmr_python_impl(
         ws = workspace
         ws.reset()
 
-    # Setup preconditioner
-    if M1 is not None:
+    # Setup preconditioner - distinguish split vs left-only
+    use_split_precond = False
+    precond = None
+    precond_M1 = None
+    precond_M2 = None
+
+    if M1 is not None and M2 is not None:
+        # Split preconditioning: M1⁻¹ A M2⁻¹
+        use_split_precond = True
         if isinstance(M1, (_ILUPreconditioner, _LUPreconditioner)):
-            precond = SparsePreconditioner(M1, M2)
+            precond_M1 = SparsePreconditioner(M1, None)
         elif sparse.issparse(M1):
-            precond = SparsePreconditioner(M1, M2)
+            precond_M1 = SparsePreconditioner(M1, None)
         elif hasattr(M1, "solve"):
-            # Custom preconditioner with .solve() method
-            precond = M1  # Use directly
+            precond_M1 = M1
         else:
-            precond = DensePreconditioner(M1, M2)
-    else:
-        precond = None
+            precond_M1 = DensePreconditioner(M1, None)
+
+        if isinstance(M2, (_ILUPreconditioner, _LUPreconditioner)):
+            precond_M2 = SparsePreconditioner(M2, None)
+        elif sparse.issparse(M2):
+            precond_M2 = SparsePreconditioner(M2, None)
+        elif hasattr(M2, "solve"):
+            precond_M2 = M2
+        else:
+            precond_M2 = DensePreconditioner(M2, None)
+
+    elif M1 is not None:
+        # Left-only preconditioning: M1⁻¹ A
+        if isinstance(M1, (_ILUPreconditioner, _LUPreconditioner)):
+            precond = SparsePreconditioner(M1, None)
+        elif sparse.issparse(M1):
+            precond = SparsePreconditioner(M1, None)
+        elif hasattr(M1, "solve"):
+            precond = M1
+        else:
+            precond = DensePreconditioner(M1, None)
 
     if x0 is None:
         x = np.zeros((n, m), dtype=dtype)
@@ -608,7 +732,14 @@ def _blqmr_python_impl(
     else:
         np.subtract(B, A @ x, out=ws.vt)
 
-    if precond is not None:
+    # Apply preconditioner to initial residual
+    if use_split_precond:
+        # For split preconditioning, initial residual is just M1⁻¹ * (b - A*x0)
+        # because we're solving M1⁻¹ A M2⁻¹ y = M1⁻¹ b with y = M2*x
+        ws.vt[:] = precond_M1.solve(ws.vt)
+        if np.any(np.isnan(ws.vt)):
+            return x, 2, 1.0, 0, np.array([])
+    elif precond is not None:
         precond.solve(ws.vt, out=ws.vt)
         if np.any(np.isnan(ws.vt)):
             return x, 2, 1.0, 0, np.array([])
@@ -667,7 +798,16 @@ def _blqmr_python_impl(
             np.matmul(A, ws.v[:, :, t3], out=ws.Av)
 
         # Apply preconditioner
-        if precond is not None:
+        if use_split_precond:
+            # Split preconditioning: M1⁻¹ * A * M2⁻¹ * v
+            tmp = precond_M2.solve(ws.v[:, :, t3])  # M2⁻¹ * v
+            if A_is_sparse:
+                tmp = A @ tmp  # A * M2⁻¹ * v
+            else:
+                tmp = np.matmul(A, tmp)
+            ws.vt[:] = precond_M1.solve(tmp) - ws.v[:, :, t3n] @ ws.beta[:, :, t3].T
+        elif precond is not None:
+            # Left-only preconditioning: M⁻¹ * A * v
             precond.solve(ws.Av, out=ws.vt)
             ws.vt[:] = ws.vt - ws.v[:, :, t3n] @ ws.beta[:, :, t3].T
         else:
@@ -768,6 +908,11 @@ def _blqmr_python_impl(
             break
 
     resv = resv[:iter_count]
+
+    # For split preconditioning, recover x = M2⁻¹ * y
+    if use_split_precond:
+        x = precond_M2.solve(x)
+
     result = x.real if not is_complex_input else x
     return result, flag, relres, iter_count, resv
 
@@ -787,7 +932,7 @@ def blqmr_solve(
     tol: float = 1e-6,
     maxiter: Optional[int] = None,
     droptol: float = 0.001,
-    use_precond: bool = True,
+    precond_type: PrecondType = "ilu",
     zero_based: bool = True,
 ) -> BLQMRResult:
     """
@@ -813,8 +958,12 @@ def blqmr_solve(
         Maximum iterations. Default is n.
     droptol : float, default 0.001
         Drop tolerance for ILU preconditioner (Fortran only).
-    use_precond : bool, default True
-        Whether to use ILU preconditioning.
+    precond_type : None, '', or str, default 'ilu'
+        Preconditioner type:
+        - None or '': No preconditioning
+        - 'ilu', 'ilu0', 'ilut': Incomplete LU
+        - 'diag', 'jacobi': Diagonal (Jacobi)
+        - For Fortran: integers 2 (ILU) or 3 (diagonal) also accepted
     zero_based : bool, default True
         If True, Ap and Ai use 0-based indexing (Python/C convention).
         If False, uses 1-based indexing (Fortran convention).
@@ -839,7 +988,7 @@ def blqmr_solve(
             tol=tol,
             maxiter=maxiter,
             droptol=droptol,
-            use_precond=use_precond,
+            precond_type=precond_type,
             zero_based=zero_based,
         )
     else:
@@ -851,13 +1000,13 @@ def blqmr_solve(
             x0=x0,
             tol=tol,
             maxiter=maxiter,
-            use_precond=use_precond,
+            precond_type=precond_type,
             zero_based=zero_based,
         )
 
 
 def _blqmr_solve_fortran(
-    Ap, Ai, Ax, b, *, x0, tol, maxiter, droptol, use_precond, zero_based
+    Ap, Ai, Ax, b, *, x0, tol, maxiter, droptol, precond_type, zero_based
 ) -> BLQMRResult:
     """Fortran backend for blqmr_solve."""
     n = len(Ap) - 1
@@ -877,10 +1026,10 @@ def _blqmr_solve_fortran(
         Ap = Ap + 1
         Ai = Ai + 1
 
-    dopcond = 1 if use_precond else 0
+    pcond_type = _parse_precond_type_for_fortran(precond_type)
 
     x, flag, niter, relres = _blqmr.blqmr_solve_real(
-        n, nnz, Ap, Ai, Ax, b, maxiter, tol, droptol, dopcond
+        n, nnz, Ap, Ai, Ax, b, maxiter, tol, droptol, pcond_type
     )
 
     return BLQMRResult(
@@ -889,7 +1038,7 @@ def _blqmr_solve_fortran(
 
 
 def _blqmr_solve_native_csc(
-    Ap, Ai, Ax, b, *, x0, tol, maxiter, use_precond, zero_based
+    Ap, Ai, Ax, b, *, x0, tol, maxiter, precond_type, zero_based
 ) -> BLQMRResult:
     """Native Python backend for blqmr_solve with CSC input."""
     n = len(Ap) - 1
@@ -900,15 +1049,7 @@ def _blqmr_solve_native_csc(
 
     A = sparse.csc_matrix((Ax, Ai, Ap), shape=(n, n))
 
-    M1 = None
-    if use_precond:
-        try:
-            M1 = make_preconditioner(A, "ilu")
-        except Exception:
-            try:
-                M1 = make_preconditioner(A, "diag")  # FIX: Changed A_sp to A
-            except Exception:
-                M1 = None  # Fall back to no preconditioning
+    M1 = _get_preconditioner_for_native(A, precond_type, None)
 
     x, flag, relres, niter, resv = _blqmr_python_impl(
         A, b, tol=tol, maxiter=maxiter, M1=M1, x0=x0
@@ -929,13 +1070,18 @@ def blqmr_solve_multi(
     tol: float = 1e-6,
     maxiter: Optional[int] = None,
     droptol: float = 0.001,
-    use_precond: bool = True,
+    precond_type: PrecondType = "ilu",
     zero_based: bool = True,
 ) -> BLQMRResult:
     """
     Solve sparse linear system AX = B with multiple right-hand sides.
 
     Uses Fortran extension if available, otherwise falls back to pure Python.
+
+    Parameters
+    ----------
+    precond_type : None, '', or str, default 'ilu'
+        Preconditioner type (see blqmr_solve for details)
     """
     n = len(Ap) - 1
 
@@ -951,7 +1097,7 @@ def blqmr_solve_multi(
             tol=tol,
             maxiter=maxiter,
             droptol=droptol,
-            use_precond=use_precond,
+            precond_type=precond_type,
             zero_based=zero_based,
         )
     else:
@@ -962,13 +1108,13 @@ def blqmr_solve_multi(
             B,
             tol=tol,
             maxiter=maxiter,
-            use_precond=use_precond,
+            precond_type=precond_type,
             zero_based=zero_based,
         )
 
 
 def _blqmr_solve_multi_fortran(
-    Ap, Ai, Ax, B, *, tol, maxiter, droptol, use_precond, zero_based
+    Ap, Ai, Ax, B, *, tol, maxiter, droptol, precond_type, zero_based
 ) -> BLQMRResult:
     """Fortran backend for blqmr_solve_multi."""
     n = len(Ap) - 1
@@ -987,10 +1133,11 @@ def _blqmr_solve_multi_fortran(
         Ap = Ap + 1
         Ai = Ai + 1
 
-    dopcond = 1 if use_precond else 0
+    # Convert precond_type string to Fortran integer code
+    pcond_type = _parse_precond_type_for_fortran(precond_type)
 
     X, flag, niter, relres = _blqmr.blqmr_solve_real_multi(
-        n, nnz, nrhs, Ap, Ai, Ax, B, maxiter, tol, droptol, dopcond
+        n, nnz, nrhs, Ap, Ai, Ax, B, maxiter, tol, droptol, pcond_type
     )
 
     return BLQMRResult(
@@ -999,7 +1146,7 @@ def _blqmr_solve_multi_fortran(
 
 
 def _blqmr_solve_multi_native(
-    Ap, Ai, Ax, B, *, tol, maxiter, use_precond, zero_based
+    Ap, Ai, Ax, B, *, tol, maxiter, precond_type, zero_based
 ) -> BLQMRResult:
     """Native Python backend for blqmr_solve_multi."""
     n = len(Ap) - 1
@@ -1010,15 +1157,7 @@ def _blqmr_solve_multi_native(
 
     A = sparse.csc_matrix((Ax, Ai, Ap), shape=(n, n))
 
-    M1 = None
-    if use_precond:
-        try:
-            M1 = make_preconditioner(A, "ilu")
-        except Exception:
-            try:
-                M1 = make_preconditioner(A, "diag")  # FIX: Changed A_sp to A
-            except Exception:
-                M1 = None  # Fall back to no preconditioning
+    M1 = _get_preconditioner_for_native(A, precond_type, None)
 
     if B.ndim == 1:
         B = B.reshape(-1, 1)
@@ -1081,7 +1220,7 @@ def blqmr(
     residual: bool = False,
     workspace: Optional[BLQMRWorkspace] = None,
     droptol: float = 0.001,
-    use_precond: bool = True,
+    precond_type: PrecondType = "ilu",
 ) -> BLQMRResult:
     """
     Block Quasi-Minimal-Residual (BL-QMR) solver - main interface.
@@ -1097,9 +1236,10 @@ def blqmr(
     tol : float
         Convergence tolerance (default: 1e-6)
     maxiter : int, optional
-        Maximum iterations (default: n for Fortran, min(n, 20) for Python)
+        Maximum iterations (default: n)
     M1, M2 : preconditioner, optional
-        Preconditioner M = M1 @ M2 (Python backend only)
+        Custom preconditioners. If provided, precond_type is ignored.
+        M = M1 @ M2 for split preconditioning (Python backend only)
     x0 : ndarray, optional
         Initial guess
     residual : bool
@@ -1108,8 +1248,13 @@ def blqmr(
         Pre-allocated workspace (Python backend only)
     droptol : float, default 0.001
         Drop tolerance for ILU preconditioner (Fortran backend only)
-    use_precond : bool, default True
-        Whether to use ILU preconditioning (Fortran backend only)
+    precond_type : None, '', or str, default 'ilu'
+        Preconditioner type (ignored if M1 is provided):
+        - None or '': No preconditioning
+        - 'ilu', 'ilu0', 'ilut': Incomplete LU
+        - 'diag', 'jacobi': Diagonal (Jacobi)
+        - 'lu': Full LU (expensive, for debugging)
+        - For Fortran: integers 2 (ILU) or 3 (diagonal) also accepted
 
     Returns
     -------
@@ -1129,7 +1274,7 @@ def blqmr(
             maxiter=maxiter,
             x0=x0,
             droptol=droptol,
-            use_precond=use_precond,
+            precond_type=precond_type,
         )
     else:
         return _blqmr_native(
@@ -1142,7 +1287,7 @@ def blqmr(
             x0=x0,
             residual=residual,
             workspace=workspace,
-            use_precond=use_precond,
+            precond_type=precond_type,
         )
 
 
@@ -1154,7 +1299,7 @@ def _blqmr_fortran(
     maxiter: Optional[int],
     x0: Optional[np.ndarray],
     droptol: float,
-    use_precond: bool,
+    precond_type: PrecondType,
 ) -> BLQMRResult:
     """Fortran backend for blqmr()."""
     A_csc = sparse.csc_matrix(A)
@@ -1176,7 +1321,7 @@ def _blqmr_fortran(
     Ap_f = np.asfortranarray(Ap + 1, dtype=np.int32)
     Ai_f = np.asfortranarray(Ai + 1, dtype=np.int32)
 
-    dopcond = 1 if use_precond else 0
+    pcond_type = _parse_precond_type_for_fortran(precond_type)
 
     # Check if complex
     is_complex = np.iscomplexobj(A) or np.iscomplexobj(B)
@@ -1189,7 +1334,7 @@ def _blqmr_fortran(
             # Single RHS
             b_f = np.asfortranarray(B.ravel(), dtype=np.complex128)
             x, flag, niter, relres = _blqmr.blqmr_solve_complex(
-                n, nnz, Ap_f, Ai_f, Ax_f, b_f, maxiter, tol, droptol, dopcond
+                n, nnz, Ap_f, Ai_f, Ax_f, b_f, maxiter, tol, droptol, pcond_type
             )
             return BLQMRResult(
                 x=x.copy(), flag=int(flag), iter=int(niter), relres=float(relres)
@@ -1199,7 +1344,7 @@ def _blqmr_fortran(
             B_f = np.asfortranarray(B, dtype=np.complex128)
             nrhs = B_f.shape[1]
             X, flag, niter, relres = _blqmr.blqmr_solve_complex_multi(
-                n, nnz, nrhs, Ap_f, Ai_f, Ax_f, B_f, maxiter, tol, droptol, dopcond
+                n, nnz, nrhs, Ap_f, Ai_f, Ax_f, B_f, maxiter, tol, droptol, pcond_type
             )
             return BLQMRResult(
                 x=X.copy(), flag=int(flag), iter=int(niter), relres=float(relres)
@@ -1212,7 +1357,7 @@ def _blqmr_fortran(
             # Single RHS
             b_f = np.asfortranarray(B.ravel(), dtype=np.float64)
             x, flag, niter, relres = _blqmr.blqmr_solve_real(
-                n, nnz, Ap_f, Ai_f, Ax_f, b_f, maxiter, tol, droptol, dopcond
+                n, nnz, Ap_f, Ai_f, Ax_f, b_f, maxiter, tol, droptol, pcond_type
             )
             return BLQMRResult(
                 x=x.copy(), flag=int(flag), iter=int(niter), relres=float(relres)
@@ -1222,7 +1367,7 @@ def _blqmr_fortran(
             B_f = np.asfortranarray(B, dtype=np.float64)
             nrhs = B_f.shape[1]
             X, flag, niter, relres = _blqmr.blqmr_solve_real_multi(
-                n, nnz, nrhs, Ap_f, Ai_f, Ax_f, B_f, maxiter, tol, droptol, dopcond
+                n, nnz, nrhs, Ap_f, Ai_f, Ax_f, B_f, maxiter, tol, droptol, pcond_type
             )
             return BLQMRResult(
                 x=X.copy(), flag=int(flag), iter=int(niter), relres=float(relres)
@@ -1240,19 +1385,13 @@ def _blqmr_native(
     x0: Optional[np.ndarray],
     residual: bool,
     workspace: Optional[BLQMRWorkspace],
-    use_precond: bool,
+    precond_type: PrecondType,
 ) -> BLQMRResult:
     """Native Python backend for blqmr()."""
-    # Auto-create preconditioner if requested and not provided
-    if use_precond and M1 is None:
+    # Get preconditioner (user-provided M1 takes precedence)
+    if M1 is None:
         A_sp = sparse.csc_matrix(A) if not sparse.issparse(A) else A
-        try:
-            M1 = make_preconditioner(A_sp, "ilu")
-        except Exception:
-            try:
-                M1 = make_preconditioner(A_sp, "diag")
-            except Exception:
-                M1 = None  # Fall back to no preconditioning
+        M1 = _get_preconditioner_for_native(A_sp, precond_type, None)
 
     x, flag, relres, niter, resv = _blqmr_python_impl(
         A,

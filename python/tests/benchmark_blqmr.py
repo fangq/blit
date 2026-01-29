@@ -185,7 +185,7 @@ def benchmark_fortran_blqmr(A, B, tol=1e-8, maxiter=None, n_runs=3):
                 maxiter=min(10, maxiter),
                 x0=None,
                 droptol=0.001,
-                use_precond=False,
+                precond_type=False,
             )
     except:
         pass
@@ -203,7 +203,7 @@ def benchmark_fortran_blqmr(A, B, tol=1e-8, maxiter=None, n_runs=3):
                     maxiter=maxiter,
                     x0=None,
                     droptol=0.001,
-                    use_precond=False,
+                    precond_type=False,
                 )
                 elapsed = time.perf_counter() - t0
                 if np.any(np.isnan(result.x)) or np.any(np.isinf(result.x)):

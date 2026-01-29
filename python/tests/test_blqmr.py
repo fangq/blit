@@ -347,8 +347,15 @@ class TestBLQMRSolve(unittest.TestCase):
     def test_no_preconditioner(self):
         """Test solving without preconditioner."""
         d = self.sys
+        # Changed: use_precond=False -> precond_type=None (or '')
         result = blqmr_solve(
-            d["Ap"], d["Ai"], d["Ax"], d["b"], use_precond=False, tol=1e-6, maxiter=500
+            d["Ap"],
+            d["Ai"],
+            d["Ax"],
+            d["b"],
+            precond_type=None,  # No preconditioning
+            tol=1e-6,
+            maxiter=500,
         )
 
         residual = np.linalg.norm(self.A_dense @ result.x - d["b"])
@@ -488,7 +495,9 @@ class TestBLQMRMainInterface(unittest.TestCase):
         A, b = TestSystemFixtures.tridiagonal_system(20)
         M1 = make_preconditioner(A, "diag")
 
-        result = blqmr(A, b, M1=M1, use_precond=False, tol=1e-10)
+        # Changed: use_precond=False -> precond_type=None
+        # When M1 is provided, precond_type is ignored anyway
+        result = blqmr(A, b, M1=M1, precond_type=None, tol=1e-10)
 
         residual = np.linalg.norm(A @ result.x - b)
         self.assertLess(residual, 1e-8)
@@ -709,6 +718,124 @@ class TestEdgeCases(unittest.TestCase):
         result = blqmr(A, b, tol=1e-12)
 
         assert_allclose(result.x, [2.0], rtol=1e-10)
+
+
+class TestPreconditionerTypes(unittest.TestCase):
+    """Tests for different precond_type values."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        try:
+            from scipy.sparse import csc_matrix
+
+            self.scipy_available = True
+            self.sys = TestSystemFixtures.small_system()
+            self.A_dense = TestSystemFixtures.csc_to_dense(
+                self.sys["Ap"], self.sys["Ai"], self.sys["Ax"], self.sys["n"]
+            )
+        except ImportError:
+            self.scipy_available = False
+
+    def test_precond_none(self):
+        """Test precond_type=None (no preconditioning)."""
+        if not self.scipy_available:
+            self.skipTest("SciPy not available")
+
+        d = self.sys
+        result = blqmr_solve(
+            d["Ap"], d["Ai"], d["Ax"], d["b"], precond_type=None, tol=1e-8, maxiter=500
+        )
+        # Should still produce a result (may not converge without precond)
+        self.assertIsInstance(result, BLQMRResult)
+
+    def test_precond_empty_string(self):
+        """Test precond_type='' (no preconditioning)."""
+        if not self.scipy_available:
+            self.skipTest("SciPy not available")
+
+        d = self.sys
+        result = blqmr_solve(
+            d["Ap"], d["Ai"], d["Ax"], d["b"], precond_type="", tol=1e-8, maxiter=500
+        )
+        self.assertIsInstance(result, BLQMRResult)
+
+    def test_precond_ilu(self):
+        """Test precond_type='ilu'."""
+        if not self.scipy_available:
+            self.skipTest("SciPy not available")
+
+        d = self.sys
+        result = blqmr_solve(
+            d["Ap"], d["Ai"], d["Ax"], d["b"], precond_type="ilu", tol=1e-10
+        )
+
+        self.assertTrue(result.converged)
+        residual = np.linalg.norm(self.A_dense @ result.x - d["b"])
+        self.assertLess(residual, 1e-8)
+
+    def test_precond_diag(self):
+        """Test precond_type='diag'."""
+        if not self.scipy_available:
+            self.skipTest("SciPy not available")
+
+        d = self.sys
+        result = blqmr_solve(
+            d["Ap"],
+            d["Ai"],
+            d["Ax"],
+            d["b"],
+            precond_type="diag",
+            tol=1e-10,
+            maxiter=100,
+        )
+
+        residual = np.linalg.norm(self.A_dense @ result.x - d["b"])
+        # Diagonal preconditioner may need more iterations
+        self.assertLess(residual, 1e-6)
+
+    def test_precond_jacobi(self):
+        """Test precond_type='jacobi' (alias for diag)."""
+        if not self.scipy_available:
+            self.skipTest("SciPy not available")
+
+        d = self.sys
+        result = blqmr_solve(
+            d["Ap"],
+            d["Ai"],
+            d["Ax"],
+            d["b"],
+            precond_type="jacobi",
+            tol=1e-10,
+            maxiter=100,
+        )
+
+        residual = np.linalg.norm(self.A_dense @ result.x - d["b"])
+        self.assertLess(residual, 1e-6)
+
+    def test_precond_integer_codes(self):
+        """Test integer precond_type codes for Fortran compatibility."""
+        if not self.scipy_available:
+            self.skipTest("SciPy not available")
+
+        d = self.sys
+
+        # 0 = no preconditioning
+        result0 = blqmr_solve(
+            d["Ap"], d["Ai"], d["Ax"], d["b"], precond_type=0, maxiter=500
+        )
+        self.assertIsInstance(result0, BLQMRResult)
+
+        # 2 = ILU
+        result2 = blqmr_solve(
+            d["Ap"], d["Ai"], d["Ax"], d["b"], precond_type=2, tol=1e-10
+        )
+        self.assertTrue(result2.converged)
+
+        # 3 = diagonal
+        result3 = blqmr_solve(
+            d["Ap"], d["Ai"], d["Ax"], d["b"], precond_type=3, tol=1e-10, maxiter=100
+        )
+        self.assertIsInstance(result3, BLQMRResult)
 
 
 class TestIntegration(unittest.TestCase):
