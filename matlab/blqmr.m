@@ -195,9 +195,16 @@ end
 if(nargin>=5 && ~isempty(M1))
     if(nargin>=6 && ~isempty(M2))
         isprecond=2;
+        % Split preconditioning: will solve M1^{-1}*A*M2^{-1}*y = M1^{-1}*b
+        % and recover x = M2^{-1}*y at the end
     else
         M=M1;
         isprecond=1;
+    end
+    % Check if M1 is a function handle (for custom preconditioners)
+    if isa(M1, 'function_handle')
+        isprecond = 3;  % Function handle preconditioner
+        precond_func = M1;
     end
 else
     if(nargin>=6 && ~isempty(M2))
@@ -215,9 +222,14 @@ relres=1;
 
 % vt0 contains the initial true residual
 if(isprecond)
-    if(isprecond==2)
-        vt=M1\(B-A*x0);
-        vt=M2\vt;
+    if(isprecond==3)
+        vt = precond_func(B-A*x0);
+    elseif(isprecond==2)
+        % Split preconditioning: transform to preconditioned space
+        % We solve M1^{-1}*A*M2^{-1}*y = M1^{-1}*b where y = M2*x
+        % Initial y0 = M2*x0, initial residual = M1^{-1}*b - M1^{-1}*A*M2^{-1}*y0
+        %                                      = M1^{-1}*(b - A*x0)
+        vt = M1\(B-A*x0);
     else
         vt=M\(B-A*x0);
     end
@@ -230,7 +242,7 @@ if(isprecond)
         return;
     end
 else
-    vt=B-A*x0;                                %eq (36)
+    vt=B-A*x0;
 end
 
 [Q,R]=qqr(vt,0); % quasi-qr decomposition,    %eq (37)
@@ -258,15 +270,19 @@ resv=zeros(maxit,1);
 for k=1:maxit
     [t3,t3n,t3p,t3nn]=updateidx(k);
     if(isprecond)
-       if(isprecond==2)
-           tmp=M1\(A*v(:,:,t3));
-           tmp=M2\tmp;
-           vt=tmp-v(:,:,t3n)*beta(:,:,t3).';
+       if(isprecond==3)
+           vt = precond_func(A*v(:,:,t3)) - v(:,:,t3n)*beta(:,:,t3).';
+       elseif(isprecond==2)
+           % Split preconditioning: apply M1^{-1} * A * M2^{-1}
+           tmp = M2\v(:,:,t3);      % M2^{-1} * v
+           tmp = A*tmp;              % A * M2^{-1} * v
+           tmp = M1\tmp;             % M1^{-1} * A * M2^{-1} * v
+           vt = tmp - v(:,:,t3n)*beta(:,:,t3).';
        else
            vt=M\(A*v(:,:,t3))-v(:,:,t3n)*beta(:,:,t3).';
        end
     else
-       vt=(A*v(:,:,t3))-v(:,:,t3n)*beta(:,:,t3).'; % eq (40)
+       vt=(A*v(:,:,t3))-v(:,:,t3n)*beta(:,:,t3).';
     end
     alpha=v(:,:,t3).'*vt;  % eq (41)
     vt=vt-v(:,:,t3)*alpha; % eq (42)
@@ -310,7 +326,14 @@ for k=1:maxit
         break;
     end
 
-    p(:,:,t3)=(v(:,:,t3)-p(:,:,t3n)*eta-p(:,:,t3nn)*theta)/zeta; % eq (49)
+    % Use pseudo-inverse if zeta is ill-conditioned (like Python version)
+    zeta_rcond = rcond(zeta);
+    if zeta_rcond < 1e-14
+        % Fall back to pseudo-inverse for robustness
+        p(:,:,t3)=(v(:,:,t3)-p(:,:,t3n)*eta-p(:,:,t3nn)*theta)*pinv(zeta);
+    else
+        p(:,:,t3)=(v(:,:,t3)-p(:,:,t3n)*eta-p(:,:,t3nn)*theta)/zeta; % eq (49)
+    end
 
     tau=Qa(:,:,t3)*taot;  % eq (50)
     x=x+p(:,:,t3)*tau;    % eq (51)
@@ -351,6 +374,11 @@ if((flag==1 || flag==3) && nargout<=1)
             ' %sresidual was %e\n'],iter,resname,relres);
 end
 
+% For split preconditioning, recover x = M2^{-1} * y
+% The iteration computed y where y = M2*x, so x = M2\y
+if(isprecond==2)
+    x = M2\x;
+end
 
 %% ========================================================================
 %  Helper functions
@@ -386,6 +414,7 @@ try
             else
                 [M1, M2] = ilu(A, struct('type', 'nofill'));
             end
+
         case {'ilutp', 'ilut'}
             % ILUTP with threshold - real matrices only
             if is_complex
@@ -393,6 +422,7 @@ try
             else
                 [M1, M2] = ilu(A, struct('type', 'ilutp', 'droptol', droptol));
             end
+
         case 'ichol'
             % Incomplete Cholesky - for SPD matrices only
             if is_complex
@@ -406,9 +436,11 @@ try
                 M1 = L;
                 M2 = L';
             end
+
         case 'diag'
             % Diagonal (Jacobi) preconditioner - works for all matrices
             [M1, M2] = diag_precond(A);
+
         otherwise
             warning('Unknown preconditioner type: %s, using none', ptype);
     end

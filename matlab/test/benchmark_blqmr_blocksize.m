@@ -3,6 +3,7 @@ function benchmark_blqmr_blocksize()
 %
 %   Compares: mldivide, QMR, BLQMR with various block sizes
 %   on complex symmetric FEM matrices
+%   Uses split preconditioning (M1 = M2 = sqrt(D)) for Jacobi
 
 fprintf('=====================================================================================================\n');
 fprintf('BLQMR BENCHMARK: mldivide vs QMR vs BLQMR (block sizes 1-64)\n');
@@ -16,6 +17,7 @@ grid_sizes = [10, 20, 30];
 
 fprintf('Config: %d RHS, tol=%.0e, maxiter=%d\n', total_rhs, tol, maxiter);
 fprintf('Block sizes: %s\n', mat2str(block_sizes));
+fprintf('Preconditioner: split Jacobi (M1 = M2 = sqrt(D))\n');
 fprintf('Note: Remainder RHS handled when %d not divisible by block size\n\n', total_rhs);
 
 all_results = cell(length(grid_sizes), 1);
@@ -31,7 +33,31 @@ for gi = 1:length(grid_sizes)
     A = assemble_helmholtz_fem(node, elem);
     B = create_distributed_sources(node, elem, total_rhs);
     
-    fprintf('  Matrix: n=%d, nnz=%d, complex symmetric\n\n', n, nnz(A));
+    fprintf('  Matrix: n=%d, nnz=%d, complex symmetric\n', n, nnz(A));
+    
+    % Create split preconditioner for Jacobi (M1 = M2 = sqrt(D))
+    use_precond = true;
+    
+    if use_precond
+        fprintf('  Creating split preconditioner (sqrt diagonal)...');
+        d = full(diag(A));
+        small_thresh = max(abs(d)) * 1e-14;
+        if small_thresh == 0
+            small_thresh = 1e-14;
+        end
+        small_idx = abs(d) < small_thresh;
+        d(small_idx) = 1;
+        % Split preconditioning: M1 = M2 = sqrt(D)
+        % This gives equilibration: D^{-1/2} * A * D^{-1/2}
+        sqrt_d = sqrt(d);
+        M1 = spdiags(sqrt_d, 0, n, n);
+        M2 = M1;  % Same as M1 for symmetric split
+        fprintf(' done\n\n');
+    else
+        fprintf('  Preconditioner: none\n\n');
+        M1 = [];
+        M2 = [];
+    end
     
     res = struct();
     res.n = n;
@@ -41,10 +67,10 @@ for gi = 1:length(grid_sizes)
     tic; x_mldiv = A \ B; res.t_mldiv = toc;
     res.res_mldiv = max_residual(A, x_mldiv, B);
     
-    % === QMR (point method, each RHS separately) ===
-    [res.t_qmr, res.iter_qmr, res.res_qmr] = run_qmr(A, B, tol, maxiter);
+    % === QMR (point method, each RHS separately, with preconditioner) ===
+    [res.t_qmr, res.iter_qmr, res.res_qmr] = run_qmr(A, B, tol, maxiter, M1, M2);
     
-    % === BLQMR with different block sizes ===
+    % === BLQMR with different block sizes (with preconditioner) ===
     res.blqmr = struct('bs', block_sizes, 'time', zeros(size(block_sizes)), ...
         'iters', zeros(size(block_sizes)), 'res', zeros(size(block_sizes)), ...
         'flag', zeros(size(block_sizes)), 'batches', zeros(size(block_sizes)));
@@ -56,7 +82,7 @@ for gi = 1:length(grid_sizes)
         num_batches = num_full + (remainder > 0);
         
         [res.blqmr.time(bi), res.blqmr.iters(bi), res.blqmr.res(bi), res.blqmr.flag(bi)] = ...
-            run_blqmr(A, B, bs, tol, maxiter);
+            run_blqmr(A, B, bs, tol, maxiter, M1, M2);
         res.blqmr.batches(bi) = num_batches;
     end
     
@@ -113,8 +139,8 @@ end
 print_summary(all_results, grid_sizes, block_sizes, total_rhs);
 end
 
-function [t, iters, residual] = run_qmr(A, B, tol, maxiter)
-%RUN_QMR Solve each RHS with MATLAB's QMR (point method)
+function [t, iters, residual] = run_qmr(A, B, tol, maxiter, M1, M2)
+%RUN_QMR Solve each RHS with MATLAB's QMR (point method) with split preconditioner
 nrhs = size(B, 2);
 n = size(A, 1);
 X = zeros(n, nrhs, 'like', B);
@@ -122,15 +148,19 @@ t = 0; iters = 0;
 
 for k = 1:nrhs
     tic;
-    [X(:,k), ~, ~, iter] = qmr(A, B(:,k), tol, maxiter);
+    if isempty(M1)
+        [X(:,k), ~, ~, iter] = qmr(A, B(:,k), tol, maxiter);
+    else
+        [X(:,k), ~, ~, iter] = qmr(A, B(:,k), tol, maxiter, M1, M2);
+    end
     t = t + toc;
     iters = iters + iter;
 end
 residual = max_residual(A, X, B);
 end
 
-function [t, iters, residual, flag] = run_blqmr(A, B, bs, tol, maxiter)
-%RUN_BLQMR Solve with BLQMR using given block size
+function [t, iters, residual, flag] = run_blqmr(A, B, bs, tol, maxiter, M1, M2)
+%RUN_BLQMR Solve with BLQMR using given block size with split preconditioner
 %   Handles remainder RHS when nrhs is not divisible by bs
 nrhs = size(B, 2);
 n = size(A, 1);
@@ -145,7 +175,11 @@ t = 0; iters = 0; flag = 0;
 for batch = 1:num_full_batches
     cols = (batch-1)*bs + (1:bs);
     tic;
-    [X(:,cols), f, ~, it] = blqmr(A, B(:,cols), tol, maxiter);
+    if isempty(M1)
+        [X(:,cols), f, ~, it] = blqmr(A, B(:,cols), tol, maxiter);
+    else
+        [X(:,cols), f, ~, it] = blqmr(A, B(:,cols), tol, maxiter, M1, M2);
+    end
     t = t + toc;
     iters = iters + it;
     flag = max(flag, f);
@@ -155,7 +189,11 @@ end
 if remainder > 0
     cols = num_full_batches*bs + (1:remainder);
     tic;
-    [X(:,cols), f, ~, it] = blqmr(A, B(:,cols), tol, maxiter);
+    if isempty(M1)
+        [X(:,cols), f, ~, it] = blqmr(A, B(:,cols), tol, maxiter);
+    else
+        [X(:,cols), f, ~, it] = blqmr(A, B(:,cols), tol, maxiter, M1, M2);
+    end
     t = t + toc;
     iters = iters + it;
     flag = max(flag, f);
@@ -345,7 +383,7 @@ yr = [min(node(:,2)), max(node(:,2))];
 zr = [min(node(:,3)), max(node(:,3))];
 
 ns = ceil(nrhs^(1/3));
-cnt = 0;
+cnt = 0;p
 src_pos = zeros(nrhs, 3);
 
 for iz = 1:ns
