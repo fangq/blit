@@ -751,12 +751,19 @@ def _blqmr_python_impl(
 
     # Compute omega - standard norm WITH conjugation (Hermitian norm)
     # Fortran: omega(i,i,t3p)=sqrt(sum(conjg(v(:,i,t3p))*v(:,i,t3p)))
-    for i in range(m):
-        col = ws.v[:, i, t3p]
-        if is_complex_input:
-            ws.omega[i, i, t3p] = np.sqrt(np.sum(np.conj(col) * col).real)
-        else:
-            ws.omega[i, i, t3p] = np.sqrt(np.sum(col * col))
+    ws.omega[:, :, t3p].fill(0)
+    if is_complex_input:
+        np.fill_diagonal(
+            ws.omega[:, :, t3p],
+            np.sqrt(
+                np.einsum("ij,ij->j", np.conj(ws.v[:, :, t3p]), ws.v[:, :, t3p]).real
+            ),
+        )
+    else:
+        np.fill_diagonal(
+            ws.omega[:, :, t3p],
+            np.sqrt(np.einsum("ij,ij->j", ws.v[:, :, t3p], ws.v[:, :, t3p])),
+        )
 
     # taut = omega * beta
     ws.taot[:] = ws.omega[:, :, t3p] @ ws.beta[:, :, t3p]
@@ -765,9 +772,11 @@ def _blqmr_python_impl(
     if isquasires:
         # Fortran: Qres0=maxval(sqrt(sum(abs(conjg(taut)*taut),1))) for complex
         if is_complex_input:
-            Qres0 = np.max(np.sqrt(np.sum(np.abs(np.conj(ws.taot) * ws.taot), axis=0)))
+            Qres0 = np.max(
+                np.sqrt(np.einsum("ij,ij->j", np.conj(ws.taot), ws.taot).real)
+            )
         else:
-            Qres0 = np.max(np.sqrt(np.sum(ws.taot * ws.taot, axis=0)))
+            Qres0 = np.max(np.sqrt(np.einsum("ij,ij->j", ws.taot, ws.taot)))
     else:
         omegat = np.zeros((n, m), dtype=dtype)
         for i in range(m):
@@ -823,12 +832,21 @@ def _blqmr_python_impl(
         ws.beta[:, :, t3p] = R
 
         # Compute omega (standard Hermitian norm)
-        for i in range(m):
-            col = ws.v[:, i, t3p]
-            if is_complex_input:
-                ws.omega[i, i, t3p] = np.sqrt(np.sum(np.conj(col) * col).real)
-            else:
-                ws.omega[i, i, t3p] = np.sqrt(np.sum(col * col))
+        ws.omega[:, :, t3p].fill(0)
+        if is_complex_input:
+            np.fill_diagonal(
+                ws.omega[:, :, t3p],
+                np.sqrt(
+                    np.einsum(
+                        "ij,ij->j", np.conj(ws.v[:, :, t3p]), ws.v[:, :, t3p]
+                    ).real
+                ),
+            )
+        else:
+            np.fill_diagonal(
+                ws.omega[:, :, t3p],
+                np.sqrt(np.einsum("ij,ij->j", ws.v[:, :, t3p], ws.v[:, :, t3p])),
+            )
 
         # Compute intermediate matrices
         ws.tmp0[:] = ws.omega[:, :, t3n] @ ws.beta[:, :, t3].T
@@ -873,10 +891,10 @@ def _blqmr_python_impl(
         if isquasires:
             if is_complex_input:
                 Qres = np.max(
-                    np.sqrt(np.sum(np.abs(np.conj(ws.taot) * ws.taot), axis=0))
+                    np.sqrt(np.einsum("ij,ij->j", np.conj(ws.taot), ws.taot).real)
                 )
             else:
-                Qres = np.max(np.sqrt(np.sum(ws.taot * ws.taot, axis=0)))
+                Qres = np.max(np.sqrt(np.einsum("ij,ij->j", ws.taot, ws.taot)))
         else:
             tmp0_diag = np.zeros((m, m), dtype=dtype)
             for i in range(m):

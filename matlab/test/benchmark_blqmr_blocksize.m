@@ -10,10 +10,11 @@ fprintf('BLQMR BENCHMARK: mldivide vs QMR vs BLQMR (block sizes 1-64)\n');
 fprintf('=====================================================================================================\n\n');
 
 total_rhs = 64;
-block_sizes = [1:10, 12:2:20, 22:4:32, 40:8:64];
+% block_sizes = [1:10, 12:2:20, 22:4:32, 40:8:64];
+block_sizes = [1:4 6:2:10, 12:4:16, 20:8:28, 32:16:64];
 tol = 1e-6;
 maxiter = 2000;
-grid_sizes = [10, 20, 30];
+grid_sizes = [10, 20, 30, 40];
 
 fprintf('Config: %d RHS, tol=%.0e, maxiter=%d\n', total_rhs, tol, maxiter);
 fprintf('Block sizes: %s\n', mat2str(block_sizes));

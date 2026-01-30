@@ -7,7 +7,7 @@
 - **Block QMR Algorithm**: Efficiently solves multiple right-hand sides simultaneously
 - **Complex Symmetric Support**: Designed for complex symmetric matrices (A = Aᵀ, not A = A†)
 - **Dual Backend**: Fortran extension for speed, Python fallback for portability
-- **ILU Preconditioning**: Built-in incomplete LU preconditioner for faster convergence
+- **Flexible Preconditioning**: ILU, diagonal (Jacobi), and split preconditioners
 - **SciPy Integration**: Works seamlessly with SciPy sparse matrices
 - **Optional Numba Acceleration**: JIT-compiled kernels for the Python backend
 
@@ -29,7 +29,7 @@ The BLQMR algorithm is an iterative Krylov subspace method specifically designed
 
 - **Three-term Lanczos Recurrence**: Builds an orthonormal basis for the Krylov subspace with short recurrences, minimizing memory usage.
 
-- **Block Updates**: Processes m right-hand sides simultaneously, with typical block sizes of 1-16.
+- **Block Updates**: Processes m right-hand sides simultaneously, with typical block sizes of 1-64.
 
 ### When to Use BLQMR
 
@@ -113,9 +113,9 @@ result = blqmr(A, b)
 
 # With options
 result = blqmr(A, b, 
-    tol=1e-8,           # Convergence tolerance
-    maxiter=1000,       # Maximum iterations
-    use_precond=True,   # Use ILU preconditioning
+    tol=1e-8,              # Convergence tolerance
+    maxiter=1000,          # Maximum iterations
+    precond_type='ilu',    # Preconditioner: 'ilu', 'diag', or None
 )
 ```
 
@@ -148,24 +148,29 @@ from blocksolver import blqmr
 A = create_helmholtz_matrix(frequency=1000)  # Your application
 b = np.complex128(source_term)
 
-result = blqmr(A, b, tol=1e-8)
+result = blqmr(A, b, tol=1e-8, precond_type='diag')
 ```
 
-### Custom Preconditioning
+### Preconditioning
 
-For the Python backend, you can provide custom preconditioners:
+BlockSolver supports multiple preconditioner types for both backends:
 
 ```python
 from blocksolver import blqmr, make_preconditioner
 
-# Create ILU preconditioner
-M1 = make_preconditioner(A, 'ilu')
+# Using precond_type parameter (works with both backends)
+result = blqmr(A, b, precond_type='ilu')    # Incomplete LU
+result = blqmr(A, b, precond_type='diag')   # Diagonal (Jacobi)
+result = blqmr(A, b, precond_type=None)     # No preconditioning
 
-# Or diagonal (Jacobi) preconditioner
-M1 = make_preconditioner(A, 'diag')
+# Custom preconditioner (Python backend only)
+M1 = make_preconditioner(A, 'ilu', drop_tol=1e-4, fill_factor=10)
+result = blqmr(A, b, M1=M1, precond_type=None)
 
-# Solve with custom preconditioner
-result = blqmr(A, b, M1=M1, use_precond=False)
+# Split preconditioning for symmetric systems (Python backend)
+# Preserves symmetry: M1^{-1} A M2^{-1}
+M = make_preconditioner(A, 'diag', split=True)  # Returns sqrt(D)
+result = blqmr(A, b, M1=M, M2=M, precond_type=None)
 ```
 
 ### SciPy-Compatible Interface
@@ -194,9 +199,9 @@ b = np.array([8., 45., -3., 3., 19.])
 
 result = blqmr_solve(Ap, Ai, Ax, b, 
     tol=1e-8,
-    droptol=0.001,      # ILU drop tolerance (Fortran only)
-    use_precond=True,
-    zero_based=True,    # 0-based indexing (default)
+    droptol=0.001,         # ILU drop tolerance (Fortran backend only)
+    precond_type='ilu',    # Preconditioner type
+    zero_based=True,       # 0-based indexing (default)
 )
 ```
 
@@ -215,7 +220,7 @@ Main solver interface.
 | `maxiter` | int | n | Maximum iterations |
 | `M1`, `M2` | preconditioner | None | Custom preconditioners (Python backend) |
 | `x0` | ndarray | None | Initial guess |
-| `use_precond` | bool | True | Use ILU preconditioning |
+| `precond_type` | str or None | 'ilu' | Preconditioner: 'ilu', 'diag', or None |
 | `droptol` | float | 0.001 | ILU drop tolerance (Fortran backend) |
 | `residual` | bool | False | Use true residual for convergence (Python) |
 | `workspace` | BLQMRWorkspace | None | Pre-allocated workspace (Python) |
@@ -232,21 +237,29 @@ Main solver interface.
 
 ### `blqmr_solve(Ap, Ai, Ax, b, **kwargs) -> BLQMRResult`
 
-Low-level CSC interface.
+Low-level CSC interface for single RHS.
 
 ### `blqmr_solve_multi(Ap, Ai, Ax, B, **kwargs) -> BLQMRResult`
 
-Multiple right-hand sides with CSC input.
+Low-level CSC interface for multiple right-hand sides.
 
 ### `blqmr_scipy(A, b, **kwargs) -> Tuple[ndarray, int]`
 
 SciPy-compatible interface returning `(x, flag)`.
 
-### `make_preconditioner(A, type) -> Preconditioner`
+### `make_preconditioner(A, precond_type, **kwargs) -> Preconditioner`
 
 Create a preconditioner for the Python backend.
 
-**Types:** `'diag'`/`'jacobi'`, `'ilu'`/`'ilu0'`, `'ssor'`
+**Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `A` | sparse matrix | required | System matrix |
+| `precond_type` | str | required | 'diag', 'jacobi', 'ilu', 'ilu0', 'ilut', 'lu', 'ssor' |
+| `split` | bool | False | Return sqrt(D) for split preconditioning |
+| `drop_tol` | float | 1e-4 | Drop tolerance for ILUT |
+| `fill_factor` | float | 10 | Fill factor for ILUT |
+| `omega` | float | 1.0 | Relaxation parameter for SSOR |
 
 ### Utility Functions
 
@@ -259,13 +272,44 @@ from blocksolver import (
 )
 ```
 
+## Benchmarks
+
+### BLQMR vs Direct Solver (mldivide)
+
+Complex symmetric FEM matrices, 4 right-hand sides, tolerance 10⁻⁸, split Jacobi preconditioner:
+
+| Grid | Nodes | NNZ | mldivide | BLQMR | Speedup |
+|------|-------|-----|----------|-------|---------|
+| 20³ | 8,000 | 110K | 135ms | 115ms | **1.2×** |
+| 30³ | 27,000 | 384K | 1.36s | 373ms | **3.6×** |
+| 40³ | 64,000 | 922K | 6.40s | 947ms | **6.8×** |
+| 50³ | 125,000 | 1.8M | 25.9s | 1.76s | **14.7×** |
+
+### Block Size Efficiency
+
+With 64 RHS on a 8,000-node complex symmetric system:
+
+| Block Size | Iterations | Speedup vs Single |
+|------------|------------|-------------------|
+| 1 (point) | 10,154 | 1.0× |
+| 4 | 2,220 | 1.8× |
+| 8 | 956 | 2.0× |
+| 16 | 361 | 2.1× |
+| 32 | 178 | 2.2× |
+
+**Optimal block size**: 8-16 for most problems. Larger blocks have diminishing returns due to increased per-iteration cost.
+
+### Iteration Efficiency
+
+With 4 RHS, BLQMR uses only ~24% of total iterations compared to 4 separate single-RHS solves — achieving **super-linear block acceleration**.
+
 ## Performance Tips
 
-1. **Use the Fortran backend** when available (10-100× faster than Python)
+1. **Use the Fortran backend** when available (faster for large systems)
 
 2. **Enable preconditioning** for ill-conditioned systems:
    ```python
-   result = blqmr(A, b, use_precond=True)
+   result = blqmr(A, b, precond_type='ilu')
    ```
 
 3. **Batch multiple right-hand sides** instead of solving one at a time:
@@ -286,9 +330,16 @@ from blocksolver import (
 5. **Reuse workspace** for repeated solves with the same dimensions:
    ```python
    from blocksolver import BLQMRWorkspace
-   ws = BLQMRWorkspace(n, m)
+   ws = BLQMRWorkspace(n, m, dtype=np.complex128)
    for b in many_rhs:
        result = blqmr(A, b, workspace=ws)
+   ```
+
+6. **Use split Jacobi for complex symmetric systems**:
+   ```python
+   # Preserves symmetry of preconditioned system
+   M = make_preconditioner(A, 'diag', split=True)
+   result = blqmr(A, b, M1=M, M2=M, precond_type=None)
    ```
 
 ## Examples
@@ -318,10 +369,10 @@ def create_diffusion_matrix(nx, ny, D=1.0, mu_a=0.01, omega=1e9):
 
 # Setup problem
 A = create_diffusion_matrix(100, 100, omega=2*np.pi*100e6)
-sources = np.random.randn(10000, 16)  # 16 source positions
+sources = np.random.randn(10000, 16) + 0j  # 16 source positions
 
 # Solve for all sources at once
-result = blqmr(A, sources, tol=1e-8)
+result = blqmr(A, sources, tol=1e-8, precond_type='diag')
 print(f"Solved {sources.shape[1]} systems in {result.iter} iterations")
 ```
 
@@ -340,7 +391,7 @@ def solve_helmholtz(K, M, f, frequencies):
     for omega in frequencies:
         # A = K - ω²M (complex symmetric if K, M are symmetric)
         A = K - omega**2 * M
-        result = blqmr(A, f, tol=1e-10)
+        result = blqmr(A, f, tol=1e-10, precond_type='diag')
         solutions.append(result.x)
     return np.array(solutions)
 ```
@@ -359,11 +410,27 @@ brew install gcc suite-sparse                  # macOS
 pip install --no-cache-dir blocksolver
 ```
 
+### Check backend status
+
+```python
+from blocksolver import get_backend_info
+print(get_backend_info())
+# {'backend': 'binary', 'has_fortran': True, 'has_numba': True}
+```
+
 ### Slow convergence
 
-1. Enable preconditioning: `use_precond=True`
+1. Enable preconditioning: `precond_type='ilu'` or `precond_type='diag'`
 2. Reduce ILU drop tolerance: `droptol=1e-4` (Fortran backend)
 3. Check matrix conditioning with `np.linalg.cond(A.toarray())`
+
+### ILU factorization fails
+
+For indefinite or complex symmetric matrices, ILU may fail:
+```python
+# Fall back to diagonal preconditioner
+result = blqmr(A, b, precond_type='diag')
+```
 
 ### Memory issues with large systems
 
@@ -373,7 +440,7 @@ pip install --no-cache-dir blocksolver
 
 ## License
 
-BSD-3-Clause / LGPL-3.0+ / GPL-3.0+ (tri-licensed)
+BSD-3-Clause or GPL-3.0+ (dual-licensed)
 
 ## Citation
 
