@@ -132,17 +132,6 @@
 !--------------------------------------------------------------------------
 !> \fn BLQMRSolve(this, Ap, Ai, Ax, nnz, x, b)
 !> \brief solving a real or complex system using BLQMR algorithm
-!--------------------------------------------------------------------------
-
-!--------------------------------------------------------------------------
-!> \fn BLQMRSolve(this, Ap, Ai, Ax, nnz, x, b)
-!> \brief solving a real or complex system using BLQMR algorithm
-!> \note Optimized version using BLAS for large matrix operations
-!--------------------------------------------------------------------------
-
-!--------------------------------------------------------------------------
-!> \fn BLQMRSolve(this, Ap, Ai, Ax, nnz, x, b)
-!> \brief solving a real or complex system using BLQMR algorithm
 !> \note Optimized version using BLAS for large matrix operations
 !--------------------------------------------------------------------------
 
@@ -150,7 +139,7 @@
         implicit none
 
         type(BLQMRSolver), intent(inout) :: this
-        integer :: i,k,m,nn,t3,t3p,t3n,t3nn, Ap(this%n+1), nnz, Ai(nnz), nrhs
+        integer :: k,m,nn,t3,t3p,t3n,t3nn, Ap(this%n+1), nnz, Ai(nnz), nrhs
         integer, parameter :: DEBUG_RES=1
         real(kind=Kdouble) :: Qres, Qres1, Qres0
         MTYPE(kind=Kdouble) :: Ax(nnz), b(this%n,nrhs), x(this%n,nrhs)
