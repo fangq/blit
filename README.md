@@ -1,8 +1,15 @@
+![](https://neurojson.org/wiki/upload/neurojson_banner_long.png)
+
 # BLIT - Block Iterative Linear Solvers
 
-[![License](https://img.shields.io/badge/license-BSD%2FLGPL%2FGPL-blue.svg)](LICENSE)
+**BLIT** (Block Iterative Linear Solvers) is a high-performance library for solving large sparse linear systems using the Block Quasi-Minimal Residual (BL-QMR) algorithm. It provides unified interfaces across Fortran, Python, MATLAB, and C++.
 
-**BLIT** (Block Linear Iterative Toolbox) is a high-performance library for solving large sparse linear systems using the Block Quasi-Minimal Residual (BL-QMR) algorithm. It provides unified interfaces across Fortran, Python, MATLAB, and C++.
+- Copyright: (C) Qianqian Fang (2005, 2011, 2026) <q.fang at neu.edu>
+- License: BSD-3-Clause and GPL-v3 dual-licensed
+- Version: 0.5.0
+- URL: https://github.com/fangq/blit
+- Acknowledgement: This project is supported by US National Institute of Health (NIH)
+  grant [U24-NS124027](https://reporter.nih.gov/project-details/10308329)
 
 ## Table of Contents
 
