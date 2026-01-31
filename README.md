@@ -7,7 +7,8 @@
 - Copyright: (C) Qianqian Fang (2005, 2011, 2026) <q.fang at neu.edu>
 - License: BSD-3-Clause and GPL-v3 dual-licensed
 - Version: 0.5.0
-- URL: https://github.com/fangq/blit
+- Website: https://neurojson.org/Page/blocksolver
+- Github: https://github.com/fangq/blit
 - Acknowledgement: This project is supported by US National Institute of Health (NIH)
   grant [U24-NS124027](https://reporter.nih.gov/project-details/10308329)
 
