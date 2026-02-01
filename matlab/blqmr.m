@@ -203,6 +203,10 @@ end
 %% Optimized scalar path for m=1 (single RHS)
 %  This provides ~2x speedup over MATLAB's built-in qmr()
 if m == 1
+    if(nargin < 6)
+        M1 = [];
+        M2 = [];
+    end
     [x, flag, relres, iter, resv] = blqmr_scalar(A, B, qtol, maxit, ...
                                                  isprecond, M1, M2, x0, isquasires);
     return
