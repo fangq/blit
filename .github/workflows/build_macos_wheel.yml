@@ -51,7 +51,7 @@ jobs:
           which gfortran || which gfortran-${GCC_VERSION}
           gfortran --version || gfortran-${GCC_VERSION} --version
       - name: Build Wheels (Python < 3.12, numpy.distutils)
-        if: ${{ matrix.python_version == '3.10' || matrix.python_version == '3.11' }}
+        if: ${{ matrix.python_version == '3.8' || matrix.python_version == '3.9' || matrix.python_version == '3.10' || matrix.python_version == '3.11' }}
         env:
           LDFLAGS: "-L/opt/homebrew/lib -L/usr/local/lib -L/opt/homebrew/opt/openblas/lib -L/usr/local/opt/openblas/lib"
           CPPFLAGS: "-I/opt/homebrew/include -I/usr/local/include"
@@ -68,7 +68,7 @@ jobs:
           mv dist/ ../
           cd ../
       - name: Build Wheels (Python >= 3.12, meson)
-        if: ${{ matrix.python_version == '3.12' || matrix.python_version == '3.13' }}
+        if: ${{ matrix.python_version == '3.12' || matrix.python_version == '3.13' || matrix.python_version == '3.14'}}
         env:
           LDFLAGS: "-L/opt/homebrew/lib -L/usr/local/lib -L/opt/homebrew/opt/openblas/lib -L/usr/local/opt/openblas/lib"
           CPPFLAGS: "-I/opt/homebrew/include -I/usr/local/include"
