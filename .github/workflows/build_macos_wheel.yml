@@ -62,7 +62,7 @@ jobs:
           F90: gfortran
         run: |
           cd python/
-          pip install wheel setuptools "numpy>=1.20,<2.0" scipy
+          pip install "setuptools<60.0" wheel "numpy>=1.20,<2.0" scipy
           python setup.py bdist_wheel
           ls dist/
           mv dist/ ../
