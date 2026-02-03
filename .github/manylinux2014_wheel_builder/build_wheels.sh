@@ -4,7 +4,7 @@ set -e
 cd /src/python/
 
 # Build wheels for each Python version
-for PYBIN in /opt/python/cp3{9,10,11,12,13}*/bin/; do
+for PYBIN in /opt/python/cp3{8,9,10,11,12,13,14}*/bin/; do
     if [ -d "$PYBIN" ]; then
         echo "========================================"
         echo "Building for: ${PYBIN}"
