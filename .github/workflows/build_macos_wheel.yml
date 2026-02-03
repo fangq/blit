@@ -62,16 +62,9 @@ jobs:
           F90: gfortran
         run: |
           cd python/
-          # Install wheel first, then setuptools (order matters!)
-          pip install wheel
-          pip install "setuptools<60.0"
-    
-          # For Python 3.11+, need standalone distutils
-          if python -c "import sys; exit(0 if sys.version_info >= (3, 11) else 1)"; then
-            pip install setuptools-distutils
-          fi
-          pip install "numpy>=1.20,<2.0" scipy
-          python setup.py bdist_wheel
+          pip install wheel "setuptools<60.0" "numpy>=1.20,<2.0" scipy
+          python setup.py build_ext --inplace
+          pip wheel . --no-deps -w dist/
           ls dist/
           mv dist/ ../
           cd ../
