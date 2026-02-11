@@ -312,20 +312,17 @@ if is_windows
 elif is_macos
   fortran_args = ['-O3', '-cpp', '-fPIC', '-fopenmp']
   c_args = ['-O3', '-fPIC']
-    # Static link libgomp: find libgomp.a from gfortran
-  gomp_static = fc.find_library('gomp', static: true, required: false)
-  if gomp_static.found()
-    link_args = ['-Wl,-Bstatic', '-lgomp', '-Wl,-Bdynamic', '-lpthread']
-  else
-    link_args = ['-fopenmp']
-  endif
+  link_args = ['-static-libgcc', '-static-libgfortran']
 else
   # Linux
   fortran_args = ['-O3', '-cpp', '-fPIC', '-fopenmp']
   c_args = ['-O3', '-fPIC']
-  # Static link libgomp on Linux: -Bstatic for gomp, -Bdynamic for pthread
-  link_args = ['-static-libgcc', '-static-libgfortran',
-               '-Wl,-Bstatic', '-lgomp', '-Wl,-Bdynamic', '-lpthread']
+
+  # DO NOT static link libgomp (causes non-PIC relocation errors)
+  link_args = [
+    '-static-libgcc',
+    '-static-libgfortran'
+  ]
 endif
 
 # Build extension - include fortranobject.c for f2py runtime support
