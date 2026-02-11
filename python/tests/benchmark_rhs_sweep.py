@@ -38,6 +38,7 @@ def _try_init_pardiso():
         return HAS_PARDISO
     try:
         from pypardiso import PyPardisoSolver
+
         pypardiso_solver = PyPardisoSolver()
         HAS_PARDISO = True
     except Exception:
@@ -256,36 +257,33 @@ def create_helmholtz_system(grid_size):
 def _complex_to_real_system(A, B):
     """
     Convert complex system to equivalent real system.
-    
+
     For complex system (A_r + i*A_i)(x_r + i*x_i) = (b_r + i*b_i):
-    
+
     [A_r  -A_i] [x_r]   [b_r]
     [A_i   A_r] [x_i] = [b_i]
-    
+
     Returns real matrix (2n x 2n) and real RHS (2n x nrhs).
     """
     n = A.shape[0]
     A_r = A.real
     A_i = A.imag
-    
+
     # Build block matrix [A_r, -A_i; A_i, A_r]
-    A_real = sparse.bmat([
-        [A_r, -A_i],
-        [A_i,  A_r]
-    ], format='csc')
-    
+    A_real = sparse.bmat([[A_r, -A_i], [A_i, A_r]], format="csc")
+
     # Build real RHS [b_r; b_i]
     B_r = B.real
     B_i = B.imag
     B_real = np.vstack([B_r, B_i])
-    
+
     return A_real, B_real
 
 
 def _real_to_complex_solution(x_real, n):
     """
     Convert real solution back to complex.
-    
+
     x_real is (2n x nrhs), returns (n x nrhs) complex.
     """
     x_r = x_real[:n, :]
@@ -295,28 +293,28 @@ def _real_to_complex_solution(x_real, n):
 
 def benchmark_direct(A, B, use_pardiso=False, n_runs=2):
     """Benchmark direct solver (PARDISO if requested and available, else SuperLU).
-    
+
     LU factorization is done once, then multiple RHS are solved.
     This matches how direct solvers are used in practice.
-    
+
     For complex matrices with PARDISO: converts to real 2x2 block system.
     """
     global HAS_PARDISO, pypardiso_solver
-    
+
     # Ensure B is 2D
     if B.ndim == 1:
         B = B.reshape(-1, 1)
     nrhs = B.shape[1]
     n = A.shape[0]
     times = []
-    
+
     # Check if matrix is complex
     is_complex = np.iscomplexobj(A) or np.iscomplexobj(B)
-    
+
     # Check PARDISO availability if requested
     if use_pardiso and pypardiso_solver is None:
         _try_init_pardiso()
-    
+
     use_pardiso_now = use_pardiso and HAS_PARDISO
     solver_name = "PARDISO" if use_pardiso_now else "SuperLU"
     if use_pardiso_now and is_complex:
@@ -377,8 +375,13 @@ def benchmark_blqmr_block(A, B, M1, M2, block_size=4, tol=1e-6, maxiter=2000, n_
                 warnings.simplefilter("ignore")
                 if use_fortran:
                     result = _blqmr_fortran(
-                        A, B_batch, tol=tol, maxiter=maxiter,
-                        x0=None, droptol=0.001, precond_type=3
+                        A,
+                        B_batch,
+                        tol=tol,
+                        maxiter=maxiter,
+                        x0=None,
+                        droptol=0.001,
+                        precond_type=3,
                     )
                     x_batch = result.x
                     total_iters += result.iter
@@ -394,13 +397,18 @@ def benchmark_blqmr_block(A, B, M1, M2, block_size=4, tol=1e-6, maxiter=2000, n_
 
         # Process remainder
         if remainder > 0:
-            B_rem = B[:, n_full_batches * block_size:]
+            B_rem = B[:, n_full_batches * block_size :]
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 if use_fortran:
                     result = _blqmr_fortran(
-                        A, B_rem, tol=tol, maxiter=maxiter,
-                        x0=None, droptol=0.001, precond_type=3
+                        A,
+                        B_rem,
+                        tol=tol,
+                        maxiter=maxiter,
+                        x0=None,
+                        droptol=0.001,
+                        precond_type=3,
                     )
                     x_rem = result.x
                     total_iters += result.iter
@@ -432,10 +440,12 @@ def max_residual(A, X, B):
     if B.ndim == 1:
         B = B.reshape(-1, 1)
     nrhs = B.shape[1]
-    return np.max([
-        np.linalg.norm(A @ X[:, i] - B[:, i]) / np.linalg.norm(B[:, i])
-        for i in range(nrhs)
-    ])
+    return np.max(
+        [
+            np.linalg.norm(A @ X[:, i] - B[:, i]) / np.linalg.norm(B[:, i])
+            for i in range(nrhs)
+        ]
+    )
 
 
 def run_sweep(grid_sizes, rhs_counts, tol=1e-6, maxiter=2000):
@@ -452,11 +462,7 @@ def run_sweep(grid_sizes, rhs_counts, tol=1e-6, maxiter=2000):
         A, node, elem, M1, M2, n = create_helmholtz_system(grid)
         print(f"  Matrix: n={n}, nnz={A.nnz}, complex symmetric")
 
-        results[grid] = {
-            'n': n,
-            'nnz': A.nnz,
-            'rhs_results': {}
-        }
+        results[grid] = {"n": n, "nnz": A.nnz, "rhs_results": {}}
 
         for nrhs in rhs_counts:
             print(f"\n  RHS={nrhs}:")
@@ -472,23 +478,32 @@ def run_sweep(grid_sizes, rhs_counts, tol=1e-6, maxiter=2000):
 
             # BLQMR with block size 4
             print(f"    BLQMR-4...", end=" ", flush=True)
-            t_blqmr, x_blqmr, iters_blqmr, flag_blqmr, n_batches, backend = benchmark_blqmr_block(
+            (
+                t_blqmr,
+                x_blqmr,
+                iters_blqmr,
+                flag_blqmr,
+                n_batches,
+                backend,
+            ) = benchmark_blqmr_block(
                 A, B, M1, M2, block_size=4, tol=tol, maxiter=maxiter
             )
             if flag_blqmr <= 1:
                 res_blqmr = max_residual(A, x_blqmr, B)
-                print(f"{t_blqmr:.3f}s [{backend}] ({n_batches} batches, {iters_blqmr} iters, res={res_blqmr:.2e})")
+                print(
+                    f"{t_blqmr:.3f}s [{backend}] ({n_batches} batches, {iters_blqmr} iters, res={res_blqmr:.2e})"
+                )
             else:
                 print(f"FAILED [{backend}] (flag={flag_blqmr})")
                 t_blqmr = None
 
-            results[grid]['rhs_results'][nrhs] = {
-                't_direct': t_direct,
-                't_blqmr': t_blqmr,
-                'iters_blqmr': iters_blqmr,
-                'flag_blqmr': flag_blqmr,
-                'direct_solver': solver_name,
-                'blqmr_backend': backend,
+            results[grid]["rhs_results"][nrhs] = {
+                "t_direct": t_direct,
+                "t_blqmr": t_blqmr,
+                "iters_blqmr": iters_blqmr,
+                "flag_blqmr": flag_blqmr,
+                "direct_solver": solver_name,
+                "blqmr_backend": backend,
             }
 
     return results
@@ -499,9 +514,9 @@ def print_summary_table(results, rhs_counts):
 
     # Get solver names from first result
     first_grid = list(results.keys())[0]
-    first_rhs = list(results[first_grid]['rhs_results'].keys())[0]
-    direct_solver = results[first_grid]['rhs_results'][first_rhs]['direct_solver']
-    blqmr_backend = results[first_grid]['rhs_results'][first_rhs]['blqmr_backend']
+    first_rhs = list(results[first_grid]["rhs_results"].keys())[0]
+    direct_solver = results[first_grid]["rhs_results"][first_rhs]["direct_solver"]
+    blqmr_backend = results[first_grid]["rhs_results"][first_rhs]["blqmr_backend"]
 
     print(f"\n{'='*120}")
     print(f"SUMMARY: {direct_solver} vs {blqmr_backend}-BLQMR-4")
@@ -520,7 +535,7 @@ def print_summary_table(results, rhs_counts):
     for grid in sorted(results.keys()):
         row = f"{grid}³ (n={results[grid]['n']:>5}) │"
         for nrhs in rhs_counts:
-            t = results[grid]['rhs_results'][nrhs]['t_direct']
+            t = results[grid]["rhs_results"][nrhs]["t_direct"]
             row += f" {t:>7.3f} │"
         print(row)
 
@@ -537,7 +552,7 @@ def print_summary_table(results, rhs_counts):
     for grid in sorted(results.keys()):
         row = f"{grid}³ (n={results[grid]['n']:>5}) │"
         for nrhs in rhs_counts:
-            t = results[grid]['rhs_results'][nrhs].get('t_blqmr')
+            t = results[grid]["rhs_results"][nrhs].get("t_blqmr")
             if t is not None:
                 row += f" {t:>7.3f} │"
             else:
@@ -546,7 +561,9 @@ def print_summary_table(results, rhs_counts):
 
     # Speedup table
     print(f"\n{'='*120}")
-    print(f"SPEEDUP: {direct_solver}_time / BLQMR_time (>1.0 = BLQMR wins, marked with *)")
+    print(
+        f"SPEEDUP: {direct_solver}_time / BLQMR_time (>1.0 = BLQMR wins, marked with *)"
+    )
     print(f"{'='*120}")
     print("─" * 100)
 
@@ -559,8 +576,8 @@ def print_summary_table(results, rhs_counts):
     for grid in sorted(results.keys()):
         row = f"{grid}³ (n={results[grid]['n']:>5}) │"
         for nrhs in rhs_counts:
-            t_direct = results[grid]['rhs_results'][nrhs]['t_direct']
-            t_blqmr = results[grid]['rhs_results'][nrhs].get('t_blqmr')
+            t_direct = results[grid]["rhs_results"][nrhs]["t_direct"]
+            t_blqmr = results[grid]["rhs_results"][nrhs].get("t_blqmr")
             if t_blqmr is not None and t_blqmr > 0:
                 speedup = t_direct / t_blqmr
                 if speedup >= 1.0:
@@ -575,16 +592,18 @@ def print_summary_table(results, rhs_counts):
     print(f"\n{'='*120}")
     print("CROSSOVER ANALYSIS")
     print(f"{'='*120}")
-    print(f"\nFor each grid size, find minimum RHS where BLQMR becomes faster than {direct_solver}:\n")
+    print(
+        f"\nFor each grid size, find minimum RHS where BLQMR becomes faster than {direct_solver}:\n"
+    )
 
     for grid in sorted(results.keys()):
-        n = results[grid]['n']
+        n = results[grid]["n"]
         crossover_rhs = None
         crossover_speedup = None
 
         for nrhs in rhs_counts:
-            t_direct = results[grid]['rhs_results'][nrhs]['t_direct']
-            t_blqmr = results[grid]['rhs_results'][nrhs].get('t_blqmr')
+            t_direct = results[grid]["rhs_results"][nrhs]["t_direct"]
+            t_blqmr = results[grid]["rhs_results"][nrhs].get("t_blqmr")
 
             if t_blqmr is not None and t_direct > t_blqmr:
                 crossover_rhs = nrhs
@@ -592,14 +611,16 @@ def print_summary_table(results, rhs_counts):
                 break
 
         if crossover_rhs is not None:
-            print(f"  Grid {grid:>2}³ (n={n:>6,}): BLQMR wins at RHS ≥ {crossover_rhs:>3}  (speedup = {crossover_speedup:.2f}x)")
+            print(
+                f"  Grid {grid:>2}³ (n={n:>6,}): BLQMR wins at RHS ≥ {crossover_rhs:>3}  (speedup = {crossover_speedup:.2f}x)"
+            )
         else:
             # Find best speedup even if < 1
             best_speedup = 0
             best_rhs = None
             for nrhs in rhs_counts:
-                t_direct = results[grid]['rhs_results'][nrhs]['t_direct']
-                t_blqmr = results[grid]['rhs_results'][nrhs].get('t_blqmr')
+                t_direct = results[grid]["rhs_results"][nrhs]["t_direct"]
+                t_blqmr = results[grid]["rhs_results"][nrhs].get("t_blqmr")
                 if t_blqmr is not None and t_blqmr > 0:
                     speedup = t_direct / t_blqmr
                     if speedup > best_speedup:
@@ -607,7 +628,9 @@ def print_summary_table(results, rhs_counts):
                         best_rhs = nrhs
 
             if best_speedup > 0:
-                print(f"  Grid {grid:>2}³ (n={n:>6,}): {direct_solver} wins all tested RHS (best BLQMR ratio: {best_speedup:.2f}x at RHS={best_rhs})")
+                print(
+                    f"  Grid {grid:>2}³ (n={n:>6,}): {direct_solver} wins all tested RHS (best BLQMR ratio: {best_speedup:.2f}x at RHS={best_rhs})"
+                )
             else:
                 print(f"  Grid {grid:>2}³ (n={n:>6,}): No valid BLQMR results")
 
@@ -619,7 +642,9 @@ def main():
     print("=" * 80)
 
     print(f"\nBackend Configuration:")
-    print(f"  Direct solver: PARDISO (complex->real 2x2 block form) if available, else SuperLU")
+    print(
+        f"  Direct solver: PARDISO (complex->real 2x2 block form) if available, else SuperLU"
+    )
     print(f"  BLQMR backend: {'Fortran' if BLQMR_EXT else 'Native Python (fallback)'}")
     print(f"  Numba acceleration: {'ENABLED' if HAS_NUMBA else 'DISABLED'}")
 

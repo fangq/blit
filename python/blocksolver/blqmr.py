@@ -19,6 +19,7 @@ __all__ = [
     "blqmr",
     "BLQMRResult",
     "BLQMR_EXT",
+    "BLQMR_OMP",
     "qqr",
     "BLQMRWorkspace",
     "SparsePreconditioner",
@@ -44,6 +45,13 @@ except ImportError:
         BLQMR_EXT = True
     except ImportError:
         pass
+
+
+# Check if Fortran module has OMP support
+BLQMR_OMP = False
+if BLQMR_EXT and _blqmr is not None:
+    BLQMR_OMP = hasattr(_blqmr, "blqmr_solve_real_multi_omp")
+
 
 # Optional Numba acceleration
 try:
@@ -1090,6 +1098,7 @@ def blqmr_solve_multi(
     droptol: float = 0.001,
     precond_type: PrecondType = "ilu",
     zero_based: bool = True,
+    nblock: int = 0,
 ) -> BLQMRResult:
     """
     Solve sparse linear system AX = B with multiple right-hand sides.
@@ -1100,6 +1109,11 @@ def blqmr_solve_multi(
     ----------
     precond_type : None, '', or str, default 'ilu'
         Preconditioner type (see blqmr_solve for details)
+    nblock : int, default 0
+        Block size for OpenMP parallelism (Fortran backend only).
+        0 means nblock=nrhs (no splitting, single block solve).
+        When nblock < nrhs, RHS columns are partitioned into chunks of
+        size nblock and solved in parallel using OpenMP threads.
     """
     n = len(Ap) - 1
 
@@ -1117,6 +1131,7 @@ def blqmr_solve_multi(
             droptol=droptol,
             precond_type=precond_type,
             zero_based=zero_based,
+            nblock=nblock,
         )
     else:
         return _blqmr_solve_multi_native(
@@ -1132,7 +1147,7 @@ def blqmr_solve_multi(
 
 
 def _blqmr_solve_multi_fortran(
-    Ap, Ai, Ax, B, *, tol, maxiter, droptol, precond_type, zero_based
+    Ap, Ai, Ax, B, *, tol, maxiter, droptol, precond_type, zero_based, nblock
 ) -> BLQMRResult:
     """Fortran backend for blqmr_solve_multi."""
     n = len(Ap) - 1
@@ -1154,9 +1169,15 @@ def _blqmr_solve_multi_fortran(
     # Convert precond_type string to Fortran integer code
     pcond_type = _parse_precond_type_for_fortran(precond_type)
 
-    X, flag, niter, relres = _blqmr.blqmr_solve_real_multi(
-        n, nnz, nrhs, Ap, Ai, Ax, B, maxiter, tol, droptol, pcond_type
-    )
+    # Use OMP variant when nblock > 0 and nblock < nrhs and OMP is available
+    if nblock > 0 and nblock < nrhs and BLQMR_OMP:
+        X, flag, niter, relres = _blqmr.blqmr_solve_real_multi_omp(
+            n, nnz, nrhs, nblock, Ap, Ai, Ax, B, maxiter, tol, droptol, pcond_type
+        )
+    else:
+        X, flag, niter, relres = _blqmr.blqmr_solve_real_multi(
+            n, nnz, nrhs, Ap, Ai, Ax, B, maxiter, tol, droptol, pcond_type
+        )
 
     return BLQMRResult(
         x=X.copy(), flag=int(flag), iter=int(niter), relres=float(relres)
@@ -1239,6 +1260,7 @@ def blqmr(
     workspace: Optional[BLQMRWorkspace] = None,
     droptol: float = 0.001,
     precond_type: PrecondType = "ilu",
+    nblock: int = 0,
 ) -> BLQMRResult:
     """
     Block Quasi-Minimal-Residual (BL-QMR) solver - main interface.
@@ -1273,6 +1295,11 @@ def blqmr(
         - 'diag', 'jacobi': Diagonal (Jacobi)
         - 'lu': Full LU (expensive, for debugging)
         - For Fortran: integers 2 (ILU) or 3 (diagonal) also accepted
+    nblock : int, default 0
+        Block size for OpenMP parallelism (Fortran backend only).
+        0 means nblock=nrhs (no splitting, single block solve).
+        When 0 < nblock < nrhs, RHS columns are partitioned into chunks
+        of size nblock and solved in parallel using OpenMP threads.
 
     Returns
     -------
@@ -1293,6 +1320,7 @@ def blqmr(
             x0=x0,
             droptol=droptol,
             precond_type=precond_type,
+            nblock=nblock,
         )
     else:
         return _blqmr_native(
@@ -1318,6 +1346,7 @@ def _blqmr_fortran(
     x0: Optional[np.ndarray],
     droptol: float,
     precond_type: PrecondType,
+    nblock: int = 0,
 ) -> BLQMRResult:
     """Fortran backend for blqmr()."""
     A_csc = sparse.csc_matrix(A)
@@ -1361,9 +1390,36 @@ def _blqmr_fortran(
             # Multiple RHS - use block method
             B_f = np.asfortranarray(B, dtype=np.complex128)
             nrhs = B_f.shape[1]
-            X, flag, niter, relres = _blqmr.blqmr_solve_complex_multi(
-                n, nnz, nrhs, Ap_f, Ai_f, Ax_f, B_f, maxiter, tol, droptol, pcond_type
-            )
+            # Use OMP variant when nblock > 0, nblock < nrhs, and OMP available
+            if nblock > 0 and nblock < nrhs and BLQMR_OMP:
+                X, flag, niter, relres = _blqmr.blqmr_solve_complex_multi_omp(
+                    n,
+                    nnz,
+                    nrhs,
+                    nblock,
+                    Ap_f,
+                    Ai_f,
+                    Ax_f,
+                    B_f,
+                    maxiter,
+                    tol,
+                    droptol,
+                    pcond_type,
+                )
+            else:
+                X, flag, niter, relres = _blqmr.blqmr_solve_complex_multi(
+                    n,
+                    nnz,
+                    nrhs,
+                    Ap_f,
+                    Ai_f,
+                    Ax_f,
+                    B_f,
+                    maxiter,
+                    tol,
+                    droptol,
+                    pcond_type,
+                )
             return BLQMRResult(
                 x=X.copy(), flag=int(flag), iter=int(niter), relres=float(relres)
             )
@@ -1384,9 +1440,36 @@ def _blqmr_fortran(
             # Multiple RHS - use block method
             B_f = np.asfortranarray(B, dtype=np.float64)
             nrhs = B_f.shape[1]
-            X, flag, niter, relres = _blqmr.blqmr_solve_real_multi(
-                n, nnz, nrhs, Ap_f, Ai_f, Ax_f, B_f, maxiter, tol, droptol, pcond_type
-            )
+            # Use OMP variant when nblock > 0, nblock < nrhs, and OMP available
+            if nblock > 0 and nblock < nrhs and BLQMR_OMP:
+                X, flag, niter, relres = _blqmr.blqmr_solve_real_multi_omp(
+                    n,
+                    nnz,
+                    nrhs,
+                    nblock,
+                    Ap_f,
+                    Ai_f,
+                    Ax_f,
+                    B_f,
+                    maxiter,
+                    tol,
+                    droptol,
+                    pcond_type,
+                )
+            else:
+                X, flag, niter, relres = _blqmr.blqmr_solve_real_multi(
+                    n,
+                    nnz,
+                    nrhs,
+                    Ap_f,
+                    Ai_f,
+                    Ax_f,
+                    B_f,
+                    maxiter,
+                    tol,
+                    droptol,
+                    pcond_type,
+                )
             return BLQMRResult(
                 x=X.copy(), flag=int(flag), iter=int(niter), relres=float(relres)
             )

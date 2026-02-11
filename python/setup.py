@@ -32,6 +32,7 @@ FORTRAN_SOURCES = [
 
 C_SOURCES = [
     "umf4_f77wrapper.c",
+    "blit_blas_threads.c",
 ]
 
 # F2PY signature file - explicitly defines the Python interface
@@ -155,9 +156,14 @@ def get_extension():
         include_dirs=include_dirs,
         library_dirs=library_dirs,
         libraries=libraries,
-        extra_f90_compile_args=["-O3", "-fPIC", "-cpp"] if USE_NUMPY_DISTUTILS else [],
-        extra_f77_compile_args=["-O3", "-fPIC"] if USE_NUMPY_DISTUTILS else [],
+        extra_f90_compile_args=["-O3", "-fPIC", "-cpp", "-fopenmp"]
+        if USE_NUMPY_DISTUTILS
+        else [],
+        extra_f77_compile_args=["-O3", "-fPIC", "-fopenmp"]
+        if USE_NUMPY_DISTUTILS
+        else [],
         extra_compile_args=["-O3", "-fPIC"],
+        extra_link_args=["-fopenmp", "-static-libgcc"],
     )
 
 
@@ -166,11 +172,11 @@ def run_setup_with_extension():
     print("[setup.py] Running setup WITH Fortran extension")
     setup(
         name="blocksolver",
-        version="0.8.5",
+        version="0.9.0",
         description="Block Quasi-Minimal-Residual sparse linear solver",
         author="Qianqian Fang",
         author_email="q.fang@neu.edu",
-        url="https://blit.sourceforge.net",
+        url="https://neurojson.org/Page/blocksolver",
         license="BSD/LGPL/GPL",
         packages=["blocksolver"],
         ext_modules=[get_extension()],
@@ -191,11 +197,11 @@ def run_setup_without_extension():
     print("[setup.py] Running setup WITHOUT Fortran extension (pure Python only)")
     setup(
         name="blocksolver",
-        version="0.8.5",
+        version="0.9.0",
         description="Block Quasi-Minimal-Residual sparse linear solver",
         author="Qianqian Fang",
         author_email="q.fang@neu.edu",
-        url="https://blit.sourceforge.net",
+        url="https://neurojson.org/Page/blocksolver",
         license="BSD/LGPL/GPL",
         packages=["blocksolver"],
         python_requires=">=3.8",

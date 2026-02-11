@@ -68,9 +68,9 @@ OBJS       := $(addsuffix $(OBJSUFFIX), $(OBJS))
 
 BLITLIB_SUFFIX=.so
 BINARY=$(BLITLIB_NAME)$(BLITLIB_SUFFIX)
-ARFLAGS := -shared -Wl,-soname,$(BINARY).1
-F90OPT     +=-fPIC
-CCFLAGS    +=-fPIC
+ARFLAGS := -shared -Wl,-soname,$(BINARY).1 $(LDFLAGS)
+F90OPT     +=-fPIC $(FCFLAGS)
+CCFLAGS    +=-fPIC $(FCFLAGS)
 
 ifeq ($(MAKECMDGOALS),static)
     BLITLIB_SUFFIX=.a

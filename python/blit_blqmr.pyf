@@ -47,6 +47,28 @@ python module _blqmr
             real*8, intent(out) :: relres
         end subroutine blqmr_solve_real_multi
 
+        subroutine blqmr_solve_real_multi_omp(n, nnz, nrhs, nblock, Ap, Ai, Ax, B, X, &
+                                               maxit, qtol, droptol, pcond_type, &
+                                               flag, iter, relres)
+            ! Solve sparse real system AX = B with OpenMP parallel blocks
+            integer, intent(in) :: n
+            integer, intent(in) :: nnz
+            integer, intent(in) :: nrhs
+            integer, intent(in) :: nblock
+            integer, intent(in), dimension(n+1), depend(n) :: Ap
+            integer, intent(in), dimension(nnz), depend(nnz) :: Ai
+            real*8, intent(in), dimension(nnz), depend(nnz) :: Ax
+            real*8, intent(in), dimension(n, nrhs), depend(n, nrhs) :: B
+            real*8, intent(out), dimension(n, nrhs), depend(n, nrhs) :: X
+            integer, intent(in) :: maxit
+            real*8, intent(in) :: qtol
+            real*8, intent(in) :: droptol
+            integer, intent(in) :: pcond_type
+            integer, intent(out) :: flag
+            integer, intent(out) :: iter
+            real*8, intent(out) :: relres
+        end subroutine blqmr_solve_real_multi_omp
+
         subroutine blqmr_solve_complex(n, nnz, Ap, Ai, Ax, b, x, &
                                        maxit, qtol, droptol, pcond_type, &
                                        flag, iter, relres)
@@ -87,5 +109,28 @@ python module _blqmr
             integer, intent(out) :: iter
             real*8, intent(out) :: relres
         end subroutine blqmr_solve_complex_multi
+
+        subroutine blqmr_solve_complex_multi_omp(n, nnz, nrhs, nblock, Ap, Ai, Ax, B, X, &
+                                                   maxit, qtol, droptol, pcond_type, &
+                                                   flag, iter, relres)
+            ! Solve sparse complex system AX = B with OpenMP parallel blocks
+            integer, intent(in) :: n
+            integer, intent(in) :: nnz
+            integer, intent(in) :: nrhs
+            integer, intent(in) :: nblock
+            integer, intent(in), dimension(n+1), depend(n) :: Ap
+            integer, intent(in), dimension(nnz), depend(nnz) :: Ai
+            complex*16, intent(in), dimension(nnz), depend(nnz) :: Ax
+            complex*16, intent(in), dimension(n, nrhs), depend(n, nrhs) :: B
+            complex*16, intent(out), dimension(n, nrhs), depend(n, nrhs) :: X
+            integer, intent(in) :: maxit
+            real*8, intent(in) :: qtol
+            real*8, intent(in) :: droptol
+            integer, intent(in) :: pcond_type
+            integer, intent(out) :: flag
+            integer, intent(out) :: iter
+            real*8, intent(out) :: relres
+        end subroutine blqmr_solve_complex_multi_omp
+
     end interface
 end python module _blqmr

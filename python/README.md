@@ -1,5 +1,12 @@
 # BlockSolver - Block Quasi-Minimal Residual (BLQMR) Sparse Linear Solver
 
+- Copyright: (C) Qianqian Fang (2005, 2011, 2026) <q.fang at neu.edu>
+- License: BSD-3-Clause and GPL-v3 dual-licensed
+- Version: 0.9.0
+- Website: https://neurojson.org/Page/blocksolver
+- Github: https://github.com/fangq/blit
+- PyPi Page: https://pypi.org/project/blocksolver/
+
 **BlockSolver** is a Python package for solving large sparse linear systems using the Block Quasi-Minimal Residual (BLQMR) algorithm. It provides both a high-performance Fortran backend and a pure Python/NumPy implementation for maximum portability.
 
 ## Features

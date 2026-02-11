@@ -9,10 +9,10 @@ build-backend = "mesonpy"
 
 [project]
 name = "blocksolver"
-version = "0.8.5"
+version = "0.9.0"
 description = "Block Quasi-Minimal-Residual sparse linear solver"
 readme = "README.md"
-license = {text = "BSD-3-Clause OR LGPL-3.0-or-later OR GPL-3.0-or-later"}
+license = {text = "BSD-3-Clause OR GPL-3.0-or-later"}
 authors = [
     {name = "Qianqian Fang", email = "q.fang@neu.edu"},
 ]
@@ -21,7 +21,6 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: BSD License",
-    "License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)",
     "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
     "Operating System :: OS Independent",
     "Operating System :: POSIX :: Linux",
@@ -35,6 +34,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Mathematics",
 ]
 requires-python = ">=3.8"
@@ -51,14 +51,14 @@ dev = ["pytest>=6.0", "build", "twine"]
 [project.urls]
 Homepage = "https://blit.sourceforge.net"
 Repository = "https://github.com/fangq/blocksolver"
-Documentation = "https://blit.sourceforge.net"
+Documentation = "https://neurojson.org/Page/blocksolver"
 "Bug Tracker" = "https://github.com/fangq/blocksolver/issues"
 
 [tool.meson-python.args]
 install = ['--skip-subprojects']
 
 [tool.cibuildwheel]
-build = "cp39-* cp310-* cp311-* cp312-* cp313-*"
+build = "cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
 skip = "*-musllinux* pp*"
 test-command = "python -c \"import blocksolver; blocksolver.test()\""
 

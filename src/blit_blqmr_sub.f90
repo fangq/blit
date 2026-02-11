@@ -6,13 +6,6 @@
 !!
 !!  URL: http://blit.sourceforge.net
 !!
-!!  Project maintainer: 
-!!      Qianqian Fang, PhD
-!!      Dept. of Bioengineering
-!!      Northeastern University
-!!      360 Huntington Ave, ISEC 206
-!!      Boston, MA 02115, USA
-!!
 !!  License:
 !!      BSD or LGPL or GPL, see LICENSE_*.txt for more details
 !!
@@ -36,7 +29,12 @@
         this%droptol=0.001_Kdouble
         this%maxit=this%n
         this%state=0
-        this%pcond_type=1    ! NEW: Default to ILU-left for backward compatibility
+        this%pcond_type=1
+#ifdef _OPENMP
+        this%nblock=1          ! Default: 1 RHS per OMP thread (best parallel scaling)
+#else
+        this%nblock=0          ! Default: all RHS in one block (no splitting)
+#endif
         this%isquasires=1
         this%debug=0
         this%flag=-1
@@ -97,27 +95,22 @@
 #endif
 
             case(3)  ! Jacobi-split
-                ! Allocate storage for sqrt(diagonal)
                 if (allocated(jacobi_sqrt_diag)) deallocate(jacobi_sqrt_diag)
                 allocate(jacobi_sqrt_diag(this%n))
                 
-                ! Extract diagonal and compute sqrt
                 do i = 1, this%n
                     diag_val = 0.0_Kdouble
-                    ! Search for diagonal entry in row i (CSC format: column i)
                     do j = Ap(i), Ap(i+1)-1
                         if (Ai(j) == i) then
                             diag_val = Ax(j)
                             exit
                         endif
                     enddo
-                    ! Handle zero/small diagonal
                     if (abs(diag_val) < 1.0d-14) diag_val = 1.0_Kdouble
                     jacobi_sqrt_diag(i) = sqrt(diag_val)
                 enddo
                 
             case default
-                ! No preconditioning or unknown type
                 this%pcond_type = 0
                 
             end select
@@ -130,9 +123,137 @@
         end subroutine BLQMRPrep
 
 !--------------------------------------------------------------------------
+!> \fn BLQMRSolveOMP(this, Ap, Ai, Ax, nnz, x, b, nrhs)
+!> \brief Solve multiple RHS in parallel using OpenMP block decomposition.
+!>
+!> When nblock < nrhs, partitions the RHS columns into chunks of size
+!> nblock and solves each chunk with BLQMRSolve in parallel via OpenMP.
+!> The last chunk handles the remainder columns.
+!>
+!> When nblock >= nrhs or nblock == 0, falls back to a single BLQMRSolve.
+!>
+!> The preconditioner is prepared once and shared read-only across threads:
+!> - ILU: UMFPACK numeric handle is only read by umf4solr
+!> - Jacobi: jacobi_sqrt_diag is module-level and read-only during solve
+!--------------------------------------------------------------------------
+
+        subroutine BLQMRSolveOMP(this, Ap, Ai, Ax, nnz, x, b, nrhs)
+        implicit none
+
+        type(BLQMRSolver), intent(inout) :: this
+        integer, intent(in) :: nrhs
+        integer :: Ap(this%n+1), nnz, Ai(nnz)
+        MTYPE(kind=Kdouble) :: Ax(nnz), b(this%n, nrhs), x(this%n, nrhs)
+
+        integer :: nb, nchunks, ichunk, col_start, col_end, blk_nrhs
+        integer :: max_flag, max_iter, nn, nthreads, tid
+        integer :: saved_blas_threads
+        real(kind=Kdouble) :: max_relres, max_res
+        type(BLQMRSolver), allocatable :: qmr_pool(:)
+        integer :: omp_get_max_threads, omp_get_thread_num
+
+        nn = this%n
+
+        ! Determine effective block size
+        nb = this%nblock
+        if (nb <= 0 .or. nb >= nrhs) then
+            ! No splitting needed - solve all RHS at once
+            call BLQMRSolve(this, Ap, Ai, Ax, nnz, x, b, nrhs)
+            return
+        endif
+
+        ! Prepare preconditioner ONCE on the parent solver
+        if(this%state==0) call BLQMRPrep(this, Ap, Ai, Ax, nnz)
+
+        ! Compute number of chunks (ceiling division)
+        nchunks = (nrhs + nb - 1) / nb
+
+        ! Allocate per-thread solver pool (pre-initialized outside parallel region)
+        nthreads = 1
+        !$ nthreads = omp_get_max_threads()
+        allocate(qmr_pool(0:nthreads-1))
+
+        do tid = 0, nthreads-1
+            qmr_pool(tid)%n          = nn
+            qmr_pool(tid)%nrhs       = 1
+            qmr_pool(tid)%maxit      = this%maxit
+            qmr_pool(tid)%qtol       = this%qtol
+            qmr_pool(tid)%droptol    = this%droptol
+            qmr_pool(tid)%pcond_type = this%pcond_type
+            qmr_pool(tid)%isquasires = this%isquasires
+            qmr_pool(tid)%debug      = this%debug
+            qmr_pool(tid)%nblock     = 0
+            qmr_pool(tid)%flag       = -1
+            qmr_pool(tid)%res        = 1e100_Kdouble
+            qmr_pool(tid)%relres     = 1e100_Kdouble
+            ! Share the parent's preconditioner (read-only during solve)
+            ! - ILU: numeric/symbolic handles are only read by umf4solr
+            ! - Jacobi: jacobi_sqrt_diag is module-level and read-only
+            qmr_pool(tid)%ilu        = this%ilu
+            qmr_pool(tid)%state      = 1  ! Mark as prepared (skip BLQMRPrep)
+        enddo
+
+        ! Initialize worst-case convergence tracking
+        max_flag = 0
+        max_iter = 0
+        max_relres = 0.0_Kdouble
+        max_res = 0.0_Kdouble
+
+        ! Pin BLAS to 1 thread to avoid oversubscription inside OMP parallel region
+        ! Save current setting, set to 1, restore after parallel region
+        saved_blas_threads = 1
+        call blit_get_blas_threads(saved_blas_threads)
+        call blit_set_blas_threads(1)
+
+        !$omp parallel do default(none) &
+        !$omp shared(nchunks, nb, nrhs, nn, Ap, Ai, Ax, nnz, x, b, qmr_pool) &
+        !$omp private(ichunk, col_start, col_end, blk_nrhs, tid) &
+        !$omp reduction(max: max_flag, max_iter, max_relres, max_res) &
+        !$omp schedule(dynamic)
+        do ichunk = 1, nchunks
+            tid = 0
+            !$ tid = omp_get_thread_num()
+
+            col_start = (ichunk - 1) * nb + 1
+            col_end   = min(ichunk * nb, nrhs)
+            blk_nrhs  = col_end - col_start + 1
+
+            qmr_pool(tid)%nrhs   = blk_nrhs
+            qmr_pool(tid)%flag   = -1
+            qmr_pool(tid)%res    = 1e100_Kdouble
+            qmr_pool(tid)%relres = 1e100_Kdouble
+
+            ! Solve this chunk
+            call BLQMRSolve(qmr_pool(tid), Ap, Ai, Ax, nnz, &
+                            x(:, col_start:col_end), &
+                            b(:, col_start:col_end), blk_nrhs)
+
+            ! Track worst-case convergence info
+            max_flag   = max(max_flag, qmr_pool(tid)%flag)
+            max_iter   = max(max_iter, qmr_pool(tid)%iter)
+            max_relres = max(max_relres, qmr_pool(tid)%relres)
+            max_res    = max(max_res, qmr_pool(tid)%res)
+        enddo
+        !$omp end parallel do
+
+        ! Restore BLAS thread count
+        call blit_set_blas_threads(saved_blas_threads)
+
+        ! Cleanup - do NOT call BLQMRDestroy since pool shares parent's ILU
+        deallocate(qmr_pool)
+
+        ! Store aggregate convergence info
+        this%flag   = max_flag
+        this%iter   = max_iter
+        this%relres = max_relres
+        this%res    = max_res
+        this%nrhs   = nrhs
+
+        end subroutine BLQMRSolveOMP
+
+!--------------------------------------------------------------------------
 !> \fn BLQMRSolve(this, Ap, Ai, Ax, nnz, x, b)
 !> \brief solving a real or complex system using BLQMR algorithm
-!> \note Optimized version using BLAS for large matrix operations
 !--------------------------------------------------------------------------
 
         subroutine BLQMRSolve(this, Ap, Ai, Ax, nnz, x, b, nrhs)
@@ -151,6 +272,7 @@
         MTYPE(kind=Kdouble),dimension(nrhs,nrhs,3):: beta,Qa,Qb,Qc,Qd,omega
         MTYPE(kind=Kdouble),dimension(this%n,nrhs)  :: vt
         MTYPE(kind=Kdouble),dimension(this%n,nrhs,3)  :: v,p
+        MTYPE(kind=Kdouble) :: one, zero, negone
 #if MTYPEID == MTYPEID_COMPLEX
         real(kind=Kdouble),dimension(this%n,nrhs,2) :: rtmp
 #endif
@@ -158,6 +280,9 @@
         this%nrhs = nrhs
         m = this%nrhs
         nn = this%n
+        one = 1.0_Kdouble
+        zero = 0.0_Kdouble
+        negone = -1.0_Kdouble
 
         if(this%state==0) call BLQMRPrep(this, Ap, Ai, Ax, nnz)
 
@@ -216,18 +341,18 @@
             call apply_precond_matvec(v(:,:,t3), vt)
             
             ! vt = vt - v(:,:,t3n) * beta(:,:,t3)^T
-            call gemm_nnt(v(:,:,t3n), beta(:,:,t3), vt, -1.0_Kdouble, 1.0_Kdouble)
+            call gemm_nnt(v(:,:,t3n), beta(:,:,t3), vt, negone, one)
 
             ! alpha = v(:,:,t3)^T * vt
             call gemm_tn(v(:,:,t3), vt, alpha)
 
             ! vt = vt - v(:,:,t3) * alpha
-            call gemm_nn(v(:,:,t3), alpha, vt, -1.0_Kdouble, 1.0_Kdouble)
+            call gemm_nn(v(:,:,t3), alpha, vt, negone, one)
 
             call qqr(vt, v(:,:,t3p), beta(:,:,t3p))
             call compute_omega(v(:,:,t3p), omega(:,:,t3p))
 
-            ! Small matrix operations (m x m) - keep using matmul
+            ! Small matrix operations (m x m)
             tmp0 = matmul(omega(:,:,t3n), transpose(beta(:,:,t3)))
             theta = matmul(Qb(:,:,t3nn), tmp0)
             tmp1 = matmul(Qd(:,:,t3nn), tmp0)
@@ -253,16 +378,15 @@
 
             call inv(zeta, tmp0)
 
-            ! p(:,:,t3) = (v(:,:,t3) - p(:,:,t3n)*eta - p(:,:,t3nn)*theta) * inv(zeta)
             tmp = v(:,:,t3)
-            call gemm_nn(p(:,:,t3n), eta, tmp, -1.0_Kdouble, 1.0_Kdouble)
-            call gemm_nn(p(:,:,t3nn), theta, tmp, -1.0_Kdouble, 1.0_Kdouble)
-            call gemm_nn(tmp, tmp0, p(:,:,t3), 1.0_Kdouble, 0.0_Kdouble)
+            call gemm_nn(p(:,:,t3n), eta, tmp, negone, one)
+            call gemm_nn(p(:,:,t3nn), theta, tmp, negone, one)
+            call gemm_nn(tmp, tmp0, p(:,:,t3), one, zero)
 
             tau = matmul(Qa(:,:,t3), taut)
             
             ! x = x + p(:,:,t3) * tau
-            call gemm_nn(p(:,:,t3), tau, x, 1.0_Kdouble, 1.0_Kdouble)
+            call gemm_nn(p(:,:,t3), tau, x, one, one)
 
             taut = matmul(Qc(:,:,t3), taut)
 
@@ -270,7 +394,7 @@
                 Qres = compute_qres_mm(taut)
             else
                 call update_omegat()
-                call gemm_nn(omegat, taut, tmp, 1.0_Kdouble, 0.0_Kdouble)
+                call gemm_nn(omegat, taut, tmp, one, zero)
 #if MTYPEID == MTYPEID_COMPLEX
                 tmp = conjg(tmp)
 #endif
@@ -318,12 +442,11 @@
         ! A is (nn x m), B is (m x m), C is (nn x m)
         MTYPE(kind=Kdouble), intent(in) :: A(nn,m), B(m,m)
         MTYPE(kind=Kdouble), intent(inout) :: C(nn,m)
-        real(kind=Kdouble), intent(in) :: alpha_val, beta_val
+        MTYPE(kind=Kdouble), intent(in) :: alpha_val, beta_val
 #if MTYPEID == MTYPEID_REAL
         call dgemm('N', 'N', nn, m, m, alpha_val, A, nn, B, m, beta_val, C, nn)
 #else
-        call zgemm('N', 'N', nn, m, m, cmplx(alpha_val,0.0d0,Kdouble), A, nn, &
-                   B, m, cmplx(beta_val,0.0d0,Kdouble), C, nn)
+        call zgemm('N', 'N', nn, m, m, alpha_val, A, nn, B, m, beta_val, C, nn)
 #endif
         end subroutine gemm_nn
 
@@ -332,12 +455,11 @@
         ! A is (nn x m), B is (m x m), C is (nn x m)
         MTYPE(kind=Kdouble), intent(in) :: A(nn,m), B(m,m)
         MTYPE(kind=Kdouble), intent(inout) :: C(nn,m)
-        real(kind=Kdouble), intent(in) :: alpha_val, beta_val
+        MTYPE(kind=Kdouble), intent(in) :: alpha_val, beta_val
 #if MTYPEID == MTYPEID_REAL
         call dgemm('N', 'T', nn, m, m, alpha_val, A, nn, B, m, beta_val, C, nn)
 #else
-        call zgemm('N', 'T', nn, m, m, cmplx(alpha_val,0.0d0,Kdouble), A, nn, &
-                   B, m, cmplx(beta_val,0.0d0,Kdouble), C, nn)
+        call zgemm('N', 'T', nn, m, m, alpha_val, A, nn, B, m, beta_val, C, nn)
 #endif
         end subroutine gemm_nnt
 
@@ -451,7 +573,7 @@
         integer :: j
 
         select case(this%pcond_type)
-        case(1)  ! ILU-left: vt = (LU)^{-1} * A * v
+        case(1)  ! ILU-left
             call spmulmat(Ap, Ai, Ax, vin, tmp)
 #if MTYPEID == MTYPEID_REAL
             call ILUPcondSolve(this%ilu, Ap, Ai, Ax, nn, m, vtout, tmp)
@@ -461,7 +583,7 @@
             vtout = cmplx(rtmp(:,:,1), rtmp(:,:,2), kind=Kdouble)
 #endif
 
-        case(2)  ! ILU-split: vt = L^{-1} * A * U^{-1} * v
+        case(2)  ! ILU-split
 #if MTYPEID == MTYPEID_REAL
             call ILUPcondSolveU(this%ilu, Ap, Ai, Ax, nn, m, tmp, vin)
 #else
@@ -478,7 +600,7 @@
             vtout = cmplx(rtmp(:,:,1), rtmp(:,:,2), kind=Kdouble)
 #endif
 
-        case(3)  ! Jacobi-split: vt = D^{-1/2} * A * D^{-1/2} * v
+        case(3)  ! Jacobi-split
             do j = 1, m
                 tmp(:,j) = vin(:,j) / jacobi_sqrt_diag(:)
             enddo
@@ -487,7 +609,7 @@
                 vtout(:,j) = tmp2_vec(:,j) / jacobi_sqrt_diag(:)
             enddo
 
-        case default  ! No preconditioning
+        case default
             call spmulmat(Ap, Ai, Ax, vin, vtout)
         end select
         end subroutine apply_precond_matvec
@@ -497,7 +619,7 @@
         if(this%pcond_type <= 0) return
 
         select case(this%pcond_type)
-        case(2)  ! ILU-split: x = U^{-1} * x
+        case(2)  ! ILU-split
             tmp = x
 #if MTYPEID == MTYPEID_REAL
             call ILUPcondSolveU(this%ilu, Ap, Ai, Ax, nn, m, x, tmp)
@@ -507,7 +629,7 @@
             x = cmplx(rtmp(:,:,1), rtmp(:,:,2), kind=Kdouble)
 #endif
 
-        case(3)  ! Jacobi-split: x = D^{-1/2} * x
+        case(3)  ! Jacobi-split
             do j = 1, m
                 x(:,j) = x(:,j) / jacobi_sqrt_diag(:)
             enddo
@@ -534,6 +656,7 @@
         write(*,'(2A,I8,A)') char(9), '"maxit":', this%maxit, ','
         write(*,'(2A,I4,A)') char(9), '"state":', this%state, ','
         write(*,'(2A,I4,A)') char(9), '"pcond_type":', this%pcond_type, ','
+        write(*,'(2A,I8,A)') char(9), '"nblock":', this%nblock, ','
         write(*,'(2A,I4,A)') char(9), '"isquasires":', this%isquasires, ','
         write(*,'(2A,E20.10E4,A)') char(9), '"res":', this%res, ','
         write(*,'(2A,I4,A)') char(9), '"debug":', this%debug,','
@@ -541,4 +664,3 @@
         write(*,'(A)') '}'
   
         end subroutine BLQMRPrint
-

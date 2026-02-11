@@ -31,6 +31,7 @@ from .blqmr import (
     blqmr,
     BLQMRResult,
     BLQMR_EXT,
+    BLQMR_OMP,
     qqr,
     BLQMRWorkspace,
     SparsePreconditioner,
@@ -39,7 +40,7 @@ from .blqmr import (
     HAS_NUMBA,
 )
 
-__version__ = "0.8.5"
+__version__ = "0.9.0"
 __author__ = "Qianqian Fang"
 
 __all__ = [
@@ -49,6 +50,7 @@ __all__ = [
     "blqmr",
     "BLQMRResult",
     "BLQMR_EXT",
+    "BLQMR_OMP",
     "HAS_NUMBA",
     "qqr",
     "BLQMRWorkspace",

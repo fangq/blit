@@ -12,7 +12,7 @@ F2PY ?= $(PYTHON) -m numpy.f2py
 # Compilers
 FC ?= gfortran
 CC ?= gcc
-FFLAGS ?= -O3 -fPIC -cpp
+FFLAGS ?= -O3 -fPIC -cpp -fopenmp
 CFLAGS ?= -O3 -fPIC
 
 # Directories
@@ -21,7 +21,7 @@ SRC_DIR = ../src
 # Library paths (adjust for your system)
 UMFPACK_INC ?= /usr/include/suitesparse
 UMFPACK_LIB ?= /usr/lib
-LIBS = -lumfpack -lamd -lcholmod -lcolamd -lsuitesparseconfig -llapack -lblas
+LIBS = -lumfpack -lamd -lcholmod -lcolamd -lsuitesparseconfig -llapack -lblas -lgomp
 
 # Sources
 FORTRAN_SRC = $(SRC_DIR)/blit_const.f90 \
@@ -32,6 +32,7 @@ FORTRAN_SRC = $(SRC_DIR)/blit_const.f90 \
               $(SRC_DIR)/blit_blqmr_f2py.f90
 
 C_SRC = $(SRC_DIR)/umf4_f77wrapper.c
+C_SRC += $(SRC_DIR)/blit_blas_threads.c
 
 # Signature file for f2py
 SIGNATURE = blit_blqmr.pyf
@@ -52,7 +53,7 @@ build: setup.py
 build-direct: $(SIGNATURE)
 	$(F2PY) -c $(SIGNATURE) \
 		--f90flags="$(FFLAGS)" \
-		-I$(UMFPACK_INC) -L$(UMFPACK_LIB) $(LIBS) \
+		--f90exec="$(FC)" -I$(UMFPACK_INC) -L$(UMFPACK_LIB) $(LIBS) \
 		$(FORTRAN_SRC) $(C_SRC)
 	mv $(MODULE)*.so blocksolver/
 	@echo "Build complete!"

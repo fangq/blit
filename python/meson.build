@@ -8,7 +8,7 @@
 #   pip install -e . --no-build-isolation
 
 project('blocksolver', ['c', 'fortran'],
-  version: '0.8.5',
+  version: '0.9.0',
   license: 'BSD-3-Clause OR LGPL-3.0-or-later',
   meson_version: '>=0.64.0',
   default_options: ['buildtype=release', 'default_library=static', 'prefer_static=true']
@@ -292,7 +292,7 @@ fortran_src = files(
 )
 
 # C sources
-c_src = files(src_dir / 'umf4_f77wrapper.c')
+c_src = files(src_dir / 'umf4_f77wrapper.c', src_dir / 'blit_blas_threads.c')
 
 # f2py wrapper generation using .pyf signature file
 pyf_file = files('blit_blqmr.pyf')
@@ -310,14 +310,22 @@ if is_windows
   # Static linking flags for Windows
   link_args = ['-static-libgcc', '-static-libgfortran']
 elif is_macos
-  fortran_args = ['-O3', '-cpp', '-fPIC']
+  fortran_args = ['-O3', '-cpp', '-fPIC', '-fopenmp']
   c_args = ['-O3', '-fPIC']
-  link_args = []
+    # Static link libgomp: find libgomp.a from gfortran
+  gomp_static = fc.find_library('gomp', static: true, required: false)
+  if gomp_static.found()
+    link_args = ['-Wl,-Bstatic', '-lgomp', '-Wl,-Bdynamic', '-lpthread']
+  else
+    link_args = ['-fopenmp']
+  endif
 else
   # Linux
-  fortran_args = ['-O3', '-cpp', '-fPIC']
+  fortran_args = ['-O3', '-cpp', '-fPIC', '-fopenmp']
   c_args = ['-O3', '-fPIC']
-  link_args = ['-static-libgcc', '-static-libgfortran']
+  # Static link libgomp on Linux: -Bstatic for gomp, -Bdynamic for pthread
+  link_args = ['-static-libgcc', '-static-libgfortran',
+               '-Wl,-Bstatic', '-lgomp', '-Wl,-Bdynamic', '-lpthread']
 endif
 
 # Build extension - include fortranobject.c for f2py runtime support

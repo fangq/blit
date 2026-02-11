@@ -6,13 +6,6 @@
 !!
 !!  URL: http://blit.sourceforge.net
 !!
-!!  Project maintainer: 
-!!      Qianqian Fang, PhD
-!!      Dept. of Bioengineering
-!!      Northeastern University
-!!      360 Huntington Ave, ISEC 206
-!!      Boston, MA 02115, USA
-!!
 !!  License:
 !!      BSD or LGPL or GPL, see LICENSE_*.txt for more details
 !!
@@ -21,11 +14,6 @@
 !==========================================================================
 !>\brief Module for Block Quasi-Minimal-Residual (BLQMR) algorithm
 !==========================================================================
-
-!--------------------------------------------------------------------------
-!>\class blit_blqmr_real
-!>\brief Block QMR Solver - for real systems
-!--------------------------------------------------------------------------
 
 #define MTYPEID_REAL    1
 #define MTYPEID_COMPLEX 2
@@ -41,13 +29,14 @@ module blit_blqmr_real
 
         private
         public :: BLQMRSolver, BLQMRCreate, BLQMRDestroy, BLQMRPrep, &
-                  BLQMRSolve, BLQMRPrint
+                  BLQMRSolve, BLQMRSolveOMP, BLQMRPrint
         interface BLQMRCreate; module procedure BLQMROnCreate; end interface
         interface BLQMRDestroy; module procedure BLQMROnDestroy; end interface
 
         type, bind(c) :: BLQMRSolver
                 integer(c_int) :: n, nrhs, maxit, state, flag, iter, isquasires, debug
-                integer(c_int) :: pcond_type  ! NEW: 0=none, 1=ILU-left, 2=ILU-split, 3=Jacobi-split
+                integer(c_int) :: pcond_type  ! 0=none, 1=ILU-left, 2=ILU-split, 3=Jacobi-split
+                integer(c_int) :: nblock      ! NEW: block size for OpenMP parallelism
                 real(c_double) :: qtol, droptol, res, relres
                 type (ILUPcond) :: ilu
         end type BLQMRSolver
@@ -81,13 +70,14 @@ module blit_blqmr_complex
 
         private
         public :: BLQMRSolver, BLQMRCreate, BLQMRDestroy, BLQMRPrep, &
-                  BLQMRSolve, BLQMRPrint
+                  BLQMRSolve, BLQMRSolveOMP, BLQMRPrint
         interface BLQMRCreate; module procedure BLQMROnCreate; end interface
         interface BLQMRDestroy; module procedure BLQMROnDestroy; end interface
 
         type, bind(c) :: BLQMRSolver
                 integer(c_int) :: n, nrhs, maxit, state, flag, iter, isquasires, debug
-                integer(c_int) :: pcond_type  ! NEW: 0=none, 1=ILU-left, 2=ILU-split, 3=Jacobi-split
+                integer(c_int) :: pcond_type
+                integer(c_int) :: nblock
                 real(c_double) :: qtol, droptol, res, relres
                 type (ILUPcond) :: ilu
         end type BLQMRSolver
@@ -142,10 +132,15 @@ implicit none
        print *, qmr%iter, qmr%flag, qmr%res, qmr%relres
        write (*,'(F8.3)') x
 
-       call BLQMRSolve(qmr,Ap,Ai,Ax, nz, x(:,1:1), b(:,1:1),1)
+       ! Test OpenMP path with nblock=1 (each RHS solved independently)
+       x=0._Kdouble
+       qmr%nblock=1
+       call BLQMRSolveOMP(qmr,Ap,Ai,Ax, nz, x, b,size(b,2))
 
+       print *, 'OpenMP result:'
        print *, qmr%iter, qmr%flag, qmr%res, qmr%relres
-       write (*,'(F8.3)') x(:,1)
+       write (*,'(F8.3)') x
+
        call BLQMRDestroy(qmr)
 
 end program test_blit_blqmr
