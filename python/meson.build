@@ -312,7 +312,7 @@ if is_windows
 elif is_macos
   fortran_args = ['-O3', '-cpp', '-fPIC', '-fopenmp']
   c_args = ['-O3', '-fPIC']
-  link_args = ['-static-libgcc', '-static-libgfortran']
+  link_args = []
 else
   # Linux
   fortran_args = ['-O3', '-cpp', '-fPIC', '-fopenmp']
