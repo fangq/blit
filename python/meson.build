@@ -305,10 +305,14 @@ f2py_wrapper = custom_target('_blqmr_f2py',
 
 # Platform-specific compiler flags
 if is_windows
-  fortran_args = ['-O3', '-cpp']
+  fortran_args = ['-O3', '-cpp', '-fopenmp']
   c_args = ['-O3']
-  # Static linking flags for Windows
-  link_args = ['-static-libgcc', '-static-libgfortran']
+  link_args = [
+    '-static-libgcc',
+    '-static-libgfortran',
+    '-Wl,-Bstatic', '-lgomp', '-lwinpthread',
+    '-Wl,-Bdynamic',
+  ]
 elif is_macos
   fortran_args = ['-O3', '-cpp', '-fPIC', '-fopenmp']
   c_args = ['-O3', '-fPIC']
