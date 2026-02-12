@@ -88,27 +88,15 @@ jobs:
         run: |
           cd python/
 
-          # Find the built .pyd
-          PYD_FILE=$(find build/ -name "*.pyd" | head -1)
-          echo "Built .pyd: $PYD_FILE"
-
-          # Use objdump to list DLL dependencies
-          echo "=== DLL dependencies ==="
-          objdump -p "$PYD_FILE" | grep "DLL Name" || true
+          MINGW_BIN="D:/a/_temp/msys64/mingw64/bin"
 
           # Copy needed MinGW runtime DLLs into the package source folder
-          MINGW_BIN="D:/a/_temp/msys64/mingw64/bin"
           for dll in libgomp-1.dll libwinpthread-1.dll; do
-            # Check if the .pyd actually depends on this DLL
-            if objdump -p "$PYD_FILE" 2>/dev/null | grep -qi "$dll"; then
-              if [ -f "$MINGW_BIN/$dll" ]; then
-                cp "$MINGW_BIN/$dll" blocksolver/
-                echo "Bundled: $dll"
-              else
-                echo "Warning: $dll needed but not found in $MINGW_BIN"
-              fi
+            if [ -f "$MINGW_BIN/$dll" ]; then
+              cp "$MINGW_BIN/$dll" blocksolver/
+              echo "Bundled: $dll"
             else
-              echo "Skipped: $dll (not a dependency)"
+              echo "Warning: $dll not found in $MINGW_BIN"
             fi
           done
 
