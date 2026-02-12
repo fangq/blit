@@ -9,7 +9,7 @@ build-backend = "mesonpy"
 
 [project]
 name = "blocksolver"
-version = "0.9.0"
+version = "0.9.1"
 description = "Block Quasi-Minimal-Residual sparse linear solver"
 readme = "README.md"
 license = {text = "BSD-3-Clause OR GPL-3.0-or-later"}

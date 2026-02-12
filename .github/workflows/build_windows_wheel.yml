@@ -84,6 +84,21 @@ jobs:
           cd python/
           pip install build meson-python meson ninja numpy scipy
           python -m build --wheel
+      - name: Bundle MinGW DLLs into wheel
+        run: |
+          cd python/
+          pip install delvewheel
+          mkdir -p dist_repaired
+          for whl in dist/*.whl; do
+            echo "Repairing: $whl"
+            delvewheel repair "$whl" \
+              --add-path "D:/a/_temp/msys64/mingw64/bin" \
+              --no-mangle-all \
+              -w dist_repaired/
+          done
+          rm -rf dist
+          mv dist_repaired dist
+          echo "Repaired wheel contents:"
           ls dist/
           mv dist/ ../
           cd ../
