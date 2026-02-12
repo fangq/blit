@@ -180,7 +180,13 @@ def benchmark_direct(A, B, n_runs=3):
                     _set_blas_threads(1)
 
             try:
-                # Need fresh solver instance after thread change
+                # Reuse global solver — free previous factorization first
+                if pypardiso_solver is not None:
+                    try:
+                        pypardiso_solver.free_memory(everything=True)
+                    except Exception:
+                        pass
+
                 from pypardiso import PyPardisoSolver
 
                 ps = PyPardisoSolver()
@@ -215,6 +221,7 @@ def benchmark_direct(A, B, n_runs=3):
 
                 pardiso_ok = True
                 solver_name = "PARDISO"
+                break
 
             except Exception as e:
                 if attempt == 0:

@@ -31,6 +31,98 @@ HAS_PARDISO = False
 pypardiso_solver = None
 
 
+def _set_blas_threads(n):
+    """Set BLAS thread count at runtime via library APIs."""
+    try:
+        import ctypes
+
+        mkl_rt = ctypes.CDLL("libmkl_rt.so", mode=ctypes.RTLD_GLOBAL)
+        mkl_rt.MKL_Set_Num_Threads(ctypes.c_int(n))
+        return
+    except (OSError, AttributeError):
+        pass
+    try:
+        import ctypes
+
+        openblas = ctypes.CDLL("libopenblas.so", mode=ctypes.RTLD_GLOBAL)
+        openblas.openblas_set_num_threads(ctypes.c_int(n))
+        return
+    except (OSError, AttributeError):
+        pass
+
+
+def _get_blas_threads():
+    """Get current BLAS thread count via library APIs."""
+    try:
+        import ctypes
+
+        mkl_rt = ctypes.CDLL("libmkl_rt.so", mode=ctypes.RTLD_GLOBAL)
+        return mkl_rt.MKL_Get_Max_Threads()
+    except (OSError, AttributeError):
+        pass
+    try:
+        import ctypes
+
+        openblas = ctypes.CDLL("libopenblas.so", mode=ctypes.RTLD_GLOBAL)
+        return openblas.openblas_get_num_threads()
+    except (OSError, AttributeError):
+        pass
+    return 1
+
+
+_threadpoolctl = None
+try:
+    import threadpoolctl
+
+    _threadpoolctl = threadpoolctl
+except ImportError:
+    pass
+
+
+def _pardiso_solve_safe(A_csr, B):
+    """
+    Solve with PARDISO, retrying with single-threaded BLAS if error -3 occurs.
+
+    PARDISO error -3 (reordering failure) is typically caused by nested
+    OpenMP thread contention when BLAS also uses multiple threads.
+
+    Reuses a single solver instance to avoid memory leaks from repeated
+    PyPardisoSolver allocations.
+    """
+    global _pardiso_instance
+    from pypardiso import PyPardisoSolver
+
+    saved_threads = _get_blas_threads()
+
+    for attempt in range(2):
+        try:
+            # Reuse global instance — free previous factorization first
+            if _pardiso_instance is not None:
+                try:
+                    _pardiso_instance.free_memory(everything=True)
+                except Exception:
+                    pass
+            _pardiso_instance = PyPardisoSolver()
+            x = _pardiso_instance.solve(A_csr, B)
+            return x
+        except Exception:
+            if attempt == 0:
+                # Pin BLAS to 1 thread and retry
+                if _threadpoolctl is not None:
+                    _threadpoolctl.threadpool_limits(limits=1)
+                else:
+                    _set_blas_threads(1)
+            else:
+                # Restore and re-raise
+                if _threadpoolctl is None:
+                    _set_blas_threads(saved_threads)
+                raise
+
+
+# Global PARDISO instance to avoid memory leaks
+_pardiso_instance = None
+
+
 def _try_init_pardiso():
     """Try to initialize PARDISO solver (lazy initialization)."""
     global HAS_PARDISO, pypardiso_solver
@@ -317,21 +409,34 @@ def benchmark_direct(A, B, use_pardiso=False, n_runs=2):
 
     use_pardiso_now = use_pardiso and HAS_PARDISO
     solver_name = "PARDISO" if use_pardiso_now else "SuperLU"
-    if use_pardiso_now and is_complex:
-        solver_name = "PARDISO (real form)"
 
     for _ in range(n_runs):
         t0 = time.perf_counter()
         if use_pardiso_now:
-            if is_complex:
-                # Convert to real system and solve
-                A_real, B_real = _complex_to_real_system(A, B)
-                x_real = pypardiso_solver.solve(A_real, B_real)
-                x = _real_to_complex_solution(x_real, n)
-            else:
-                # Real matrix - solve directly
-                x = pypardiso_solver.solve(A, B)
-        else:
+            try:
+                if is_complex:
+                    # Convert complex to real 2x2 block system
+                    A_r = A.real
+                    A_i = A.imag
+                    A_real = sparse.bmat([[A_r, -A_i], [A_i, A_r]], format="csr")
+                    B_real = np.vstack([B.real, B.imag])
+
+                    x_real = _pardiso_solve_safe(A_real, B_real)
+                    if x_real.ndim == 1:
+                        x_real = x_real.reshape(-1, 1)
+                    x = x_real[:n, :] + 1j * x_real[n:, :]
+                else:
+                    x = _pardiso_solve_safe(A.tocsr(), B)
+            except Exception:
+                # PARDISO failed even after retry — fall back to SuperLU
+                use_pardiso_now = False
+                solver_name = "SuperLU"
+                lu = splu(A.tocsc())
+                x = np.zeros((n, nrhs), dtype=B.dtype)
+                for i in range(nrhs):
+                    x[:, i] = lu.solve(B[:, i])
+
+        if not use_pardiso_now:
             # SuperLU: factorize once, solve all RHS
             lu = splu(A.tocsc())
             x = np.zeros((n, nrhs), dtype=B.dtype)
@@ -382,6 +487,7 @@ def benchmark_blqmr_block(A, B, M1, M2, block_size=4, tol=1e-6, maxiter=2000, n_
                         x0=None,
                         droptol=0.001,
                         precond_type=3,
+                        nblock=1,
                     )
                     x_batch = result.x
                     total_iters += result.iter
@@ -409,6 +515,7 @@ def benchmark_blqmr_block(A, B, M1, M2, block_size=4, tol=1e-6, maxiter=2000, n_
                         x0=None,
                         droptol=0.001,
                         precond_type=3,
+                        nblock=1,
                     )
                     x_rem = result.x
                     total_iters += result.iter
@@ -486,7 +593,7 @@ def run_sweep(grid_sizes, rhs_counts, tol=1e-6, maxiter=2000):
                 n_batches,
                 backend,
             ) = benchmark_blqmr_block(
-                A, B, M1, M2, block_size=4, tol=tol, maxiter=maxiter
+                A, B, M1, M2, block_size=nrhs, tol=tol, maxiter=maxiter
             )
             if flag_blqmr <= 1:
                 res_blqmr = max_residual(A, x_blqmr, B)
@@ -648,19 +755,20 @@ def main():
     print(f"  BLQMR backend: {'Fortran' if BLQMR_EXT else 'Native Python (fallback)'}")
     print(f"  Numba acceleration: {'ENABLED' if HAS_NUMBA else 'DISABLED'}")
 
-    block_size = 4
+    block_size = 0
     tol = 1e-6
     maxiter = 2000
 
     print(f"\nSolver Configuration:")
-    print(f"  BLQMR block size: 4")
+    print(f"  BLQMR block size: 0")
     print(f"  Tolerance: {tol}")
     print(f"  Max iterations: {maxiter}")
     print(f"  Preconditioner: split Jacobi (M1 = M2 = sqrt(D))")
     print(f"  Matrix: complex symmetric Helmholtz FEM (tetrahedral mesh)")
 
     # Sweep parameters
-    grid_sizes = [10, 15, 20, 25, 30]
+    grid_sizes = [10, 15, 20, 25, 30, 35, 40]
+    grid_sizes = [30]
     rhs_counts = [1, 2, 4, 8, 16, 32, 64, 128]
 
     print(f"\nSweep Parameters:")
