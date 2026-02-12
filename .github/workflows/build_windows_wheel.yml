@@ -44,35 +44,33 @@ jobs:
       - name: Put MSYS2_MinGW64 on PATH
         run: echo "D:/a/_temp/msys64/mingw64/bin" >> $GITHUB_PATH
       - name: Create Python import library for MinGW
-        shell: pwsh
         run: |
           # Get Python paths
-          $pythonDir = Split-Path (Get-Command python).Source
-          $pythonVersion = python -c "import sys; print(f'{sys.version_info.major}{sys.version_info.minor}')"
-          $pythonDll = "python${pythonVersion}.dll"
-          $pythonLib = "libpython${pythonVersion}.a"
-          
+          PYTHON_DIR=$(dirname "$(which python)")
+          PYTHON_VER=$(python -c "import sys; print(f'{sys.version_info.major}{sys.version_info.minor}')")
+          PYTHON_DLL="python${PYTHON_VER}.dll"
+          PYTHON_LIB="libpython${PYTHON_VER}.a"
+
           # Find the DLL
-          $dllPath = Join-Path $pythonDir $pythonDll
-          if (-not (Test-Path $dllPath)) {
-            $dllPath = "C:\Windows\System32\$pythonDll"
-          }
-          
-          Write-Host "Python DLL: $dllPath"
-          Write-Host "Creating import library: $pythonLib"
-          
+          DLL_PATH="${PYTHON_DIR}/${PYTHON_DLL}"
+          if [ ! -f "$DLL_PATH" ]; then
+            DLL_PATH="/c/Windows/System32/${PYTHON_DLL}"
+          fi
+
+          echo "Python DLL: $DLL_PATH"
+          echo "Creating import library: $PYTHON_LIB"
+
           # Create .def file from DLL exports
-          $defFile = "python${pythonVersion}.def"
-          & "D:\a\_temp\msys64\mingw64\bin\gendef.exe" $dllPath
-          
+          gendef.exe "$DLL_PATH"
+
           # Create import library
-          & "D:\a\_temp\msys64\mingw64\bin\dlltool.exe" --dllname $pythonDll --def $defFile --output-lib $pythonLib
-          
+          dlltool.exe --dllname "$PYTHON_DLL" --def "python${PYTHON_VER}.def" --output-lib "$PYTHON_LIB"
+
           # Copy to Python libs directory
-          $libsDir = Join-Path $pythonDir "libs"
-          Copy-Item $pythonLib $libsDir -Force
-          Write-Host "Copied $pythonLib to $libsDir"
-      - name: Build Wheels with Meson
+          LIBS_DIR="${PYTHON_DIR}/libs"
+          cp "$PYTHON_LIB" "$LIBS_DIR/"
+          echo "Copied $PYTHON_LIB to $LIBS_DIR"
+      - name: Bundle MinGW DLLs and Build Wheel
         env:
           UMFPACK_INCLUDE: "D:/a/_temp/msys64/mingw64/include/suitesparse;D:/a/_temp/msys64/mingw64/include"
           UMFPACK_LIB: "D:/a/_temp/msys64/mingw64/lib"
@@ -82,15 +80,9 @@ jobs:
           PKG_CONFIG_PATH: "D:/a/_temp/msys64/mingw64/lib/pkgconfig"
         run: |
           cd python/
-          pip install build meson-python meson ninja numpy scipy
-          python -m build --wheel
-      - name: Bundle MinGW DLLs into wheel
-        run: |
-          cd python/
 
+          # Copy MinGW runtime DLLs into package folder before building
           MINGW_BIN="D:/a/_temp/msys64/mingw64/bin"
-
-          # Copy needed MinGW runtime DLLs into the package source folder
           for dll in libgomp-1.dll libwinpthread-1.dll; do
             if [ -f "$MINGW_BIN/$dll" ]; then
               cp "$MINGW_BIN/$dll" blocksolver/
@@ -103,8 +95,8 @@ jobs:
           echo "=== Package contents ==="
           ls -la blocksolver/
 
-          # Rebuild wheel with DLLs included
-          rm -rf dist
+          # Build wheel (single build, DLLs already in place)
+          pip install build meson-python meson ninja numpy scipy
           python -m build --wheel
 
           ls dist/
