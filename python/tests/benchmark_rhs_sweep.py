@@ -768,7 +768,6 @@ def main():
 
     # Sweep parameters
     grid_sizes = [10, 15, 20, 25, 30, 35, 40]
-    grid_sizes = [30]
     rhs_counts = [1, 2, 4, 8, 16, 32, 64, 128]
 
     print(f"\nSweep Parameters:")
