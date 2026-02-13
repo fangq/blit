@@ -349,12 +349,12 @@ py.install_sources(
 )
 
 # Install bundled MinGW runtime DLLs on Windows (libgomp, libwinpthread)
-# These are copied into blocksolver/ before building by the CI workflow
 if is_windows
-  foreach dll : ['libgomp-1.dll', 'libwinpthread-1.dll']
-    dll_path = 'blocksolver' / dll
-    if run_command('cmd', '/c', 'if exist "' + dll_path + '" echo yes', check: false).stdout().strip() == 'yes'
-      install_data(dll_path, install_dir: py.get_install_dir() / 'blocksolver')
-    endif
-  endforeach
+  install_data(
+    [
+      'blocksolver/libgomp-1.dll',
+      'blocksolver/libwinpthread-1.dll',
+    ],
+    install_dir: py.get_install_dir() / 'blocksolver'
+  )
 endif

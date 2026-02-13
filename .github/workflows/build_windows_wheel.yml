@@ -81,41 +81,23 @@ jobs:
         run: |
           cd python/
 
-          # Build wheel first
+          # Copy MinGW runtime DLLs into package folder before building
+          MINGW_BIN="D:/a/_temp/msys64/mingw64/bin"
+          for dll in libgomp-1.dll libwinpthread-1.dll; do
+            if [ -f "$MINGW_BIN/$dll" ]; then
+              cp "$MINGW_BIN/$dll" blocksolver/
+              echo "Bundled: $dll"
+            else
+              echo "Warning: $dll not found in $MINGW_BIN"
+            fi
+          done
+
+          echo "=== Package contents ==="
+          ls -la blocksolver/
+
+          # Build wheel (single build, DLLs already in place)
           pip install build meson-python meson ninja numpy scipy
           python -m build --wheel
-
-          # Inject MinGW runtime DLLs directly into the wheel
-          MINGW_BIN="D:/a/_temp/msys64/mingw64/bin"
-          for whl in dist/*.whl; do
-            echo "Injecting DLLs into: $whl"
-            for dll in libgomp-1.dll libwinpthread-1.dll; do
-              if [ -f "$MINGW_BIN/$dll" ]; then
-                python -c "
-import zipfile, sys
-whl, dll_path, dll_name = sys.argv[1], sys.argv[2], sys.argv[3]
-with zipfile.ZipFile(whl, 'a') as zf:
-    arcname = 'blocksolver/' + dll_name
-    if arcname not in zf.namelist():
-        zf.write(dll_path, arcname)
-        print(f'  Added: {arcname}')
-    else:
-        print(f'  Already present: {arcname}')
-" "$whl" "$MINGW_BIN/$dll" "$dll"
-              else
-                echo "  Warning: $dll not found in $MINGW_BIN"
-              fi
-            done
-
-            # Show final wheel contents
-            echo "=== Wheel contents ==="
-            python -c "
-import zipfile, sys
-with zipfile.ZipFile(sys.argv[1]) as zf:
-    for i in zf.infolist():
-        print(f'  {i.filename}  ({i.file_size})')
-" "$whl"
-          done
 
           ls dist/
           mv dist/ ../
