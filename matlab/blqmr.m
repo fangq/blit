@@ -39,6 +39,9 @@ function [x, flag, relres, iter, resv] = blqmr(A, B, qtol, maxit, M1, M2, x0, va
 %                RHS at once). When blocksize=1, solves one RHS at a time
 %                (more robust for complex symmetric systems). Useful for
 %                memory management or avoiding block algorithm instabilities.
+%            opt.usefortran: if set to 0, force using the MATLAB native
+%                solver even if the Fortran MEX blqmr_ is available
+%                (default: 1 - use MEX when available)
 %
 % Output:
 %      x: the solution, dimension N x Nrhs
@@ -72,7 +75,7 @@ function [x, flag, relres, iter, resv] = blqmr(A, B, qtol, maxit, M1, M2, x0, va
 %
 %      Boyse, W. E., Seidl, A. A. (1996) A block QMR method for computing
 %      multiple simultaneous solutions to complex symmetric systems.
-%      SIAM J. Sci. Comput. 17, 263–274.
+%      SIAM J. Sci. Comput. 17, 263-274.
 %
 %  -- this file is part of Blit sparse solver library
 %     URL: http://blit.sf.net
@@ -148,6 +151,89 @@ if blocksize < m
     flag = max(flags);    % Worst case flag
     relres = max(relress); % Worst case residual
     iter = max(iters);    % Max iterations
+    return
+end
+
+%% Try Fortran MEX acceleration (blqmr_)
+%  Conditions: no custom M1/M2 provided, sparse A, no function handle precond,
+%  and user did not disable it via opt.usefortran=0
+
+use_fortran = exist('blqmr_', 'file') == 3;  % 3 = MEX file
+
+% Check if user disabled Fortran
+if use_fortran && ~isempty(opt) && isfield(opt, 'usefortran')
+    use_fortran = opt.usefortran;
+end
+
+% Cannot use Fortran MEX when custom M1/M2 matrices are provided
+if use_fortran && ((nargin >= 5 && ~isempty(M1)) || (nargin >= 6 && ~isempty(M2)))
+    % User supplied custom preconditioner - fall through to MATLAB solver
+    % unless opt.precond was set (which we can map to Fortran pcond_type)
+    if isempty(opt) || ~isfield(opt, 'precond')
+        use_fortran = false;
+    end
+end
+
+% Cannot use Fortran MEX with function handle preconditioners
+if use_fortran && nargin >= 5 && ~isempty(M1) && isa(M1, 'function_handle')
+    use_fortran = false;
+end
+
+% Fortran MEX requires sparse input
+if use_fortran && ~issparse(A)
+    use_fortran = false;
+end
+
+% opt.residual (true residual mode) is not supported by Fortran backend
+if use_fortran && ~isempty(opt) && isfield(opt, 'residual') && opt.residual
+    use_fortran = false;
+end
+
+if use_fortran
+    % Map parameters for Fortran MEX
+    if nargin < 3 || isempty(qtol), qtol = 1e-6; end
+    if nargin < 4 || isempty(maxit), maxit = min(n, 20); end
+
+    % Map preconditioner type to Fortran integer code
+    %   0 = none, 1 = ILU-left, 2 = ILU-split, 3 = Jacobi-split
+    pcond_type = 1;  % default: ILU-left
+    droptol_f = 0.001;
+
+    if ~isempty(opt) && isfield(opt, 'precond')
+        ptype = opt.precond;
+        if ischar(ptype) || isstring(ptype)
+            switch lower(char(ptype))
+                case {'ilu', 'ilutp', 'ilut', 'ilu0'}
+                    pcond_type = 2;  % ILU-split (UMFPACK-based)
+                case {'diag', 'jacobi'}
+                    pcond_type = 3;  % Jacobi-split
+                case 'none'
+                    pcond_type = 0;
+                otherwise
+                    pcond_type = 1;  % default ILU-left
+            end
+        elseif isnumeric(ptype)
+            pcond_type = ptype;
+        end
+    elseif (nargin < 5 || isempty(M1)) && (nargin < 6 || isempty(M2))
+        % No preconditioner requested at all
+        pcond_type = 0;
+    end
+
+    if ~isempty(opt) && isfield(opt, 'droptol')
+        droptol_f = opt.droptol;
+    end
+
+    % Map blocksize to nblock for OpenMP
+    nblock = 0;
+    if ~isempty(opt) && isfield(opt, 'blocksize') && ~isempty(opt.blocksize)
+        nblock = opt.blocksize;
+    end
+
+    % Call Fortran MEX
+    [x, flag, relres, iter] = blqmr_(A, B, qtol, maxit, ...
+                                      pcond_type, droptol_f, nblock);
+    resv = [];  % Fortran backend does not return per-iteration residuals
     return
 end
 
