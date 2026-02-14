@@ -155,40 +155,38 @@ if blocksize < m
 end
 
 %% Try Fortran MEX acceleration (blqmr_)
-%  Conditions: sparse A, no custom M1/M2 matrices, no function handle precond,
-%  opt.residual not set, and user did not disable it via opt.usefortran=0
+%  Conditions: no custom M1/M2 provided, sparse A, no function handle precond,
+%  and user did not disable it via opt.usefortran=0
 
 use_fortran = exist('blqmr_', 'file') == 3;  % 3 = MEX file
 
-if use_fortran
-    % Check if user disabled Fortran
-    if ~isempty(opt) && isfield(opt, 'usefortran') && ~opt.usefortran
+% Check if user disabled Fortran
+if use_fortran && ~isempty(opt) && isfield(opt, 'usefortran')
+    use_fortran = opt.usefortran;
+end
+
+% Cannot use Fortran MEX when custom M1/M2 matrices are provided
+if use_fortran && ((nargin >= 5 && ~isempty(M1)) || (nargin >= 6 && ~isempty(M2)))
+    % User supplied custom preconditioner - fall through to MATLAB solver
+    % unless opt.precond was set (which we can map to Fortran pcond_type)
+    if isempty(opt) || ~isfield(opt, 'precond')
         use_fortran = false;
     end
+end
 
-    % Fortran MEX requires sparse input
-    if use_fortran && ~issparse(A)
-        use_fortran = false;
-    end
+% Cannot use Fortran MEX with function handle preconditioners
+if use_fortran && nargin >= 5 && ~isempty(M1) && isa(M1, 'function_handle')
+    use_fortran = false;
+end
 
-    % Cannot use Fortran MEX with custom M1/M2 matrices
-    has_custom_M1 = nargin >= 5 && ~isempty(M1);
-    has_custom_M2 = nargin >= 6 && ~isempty(M2);
+% Fortran MEX requires sparse input
+if use_fortran && ~issparse(A)
+    use_fortran = false;
+end
 
-    if use_fortran && (has_custom_M1 || has_custom_M2)
-        % Function handle preconditioners are never supported
-        if has_custom_M1 && isa(M1, 'function_handle')
-            use_fortran = false;
-        else
-            % Matrix preconditioners: can't pass to Fortran, fall through
-            use_fortran = false;
-        end
-    end
-
-    % opt.residual (true residual mode) is not supported by Fortran backend
-    if use_fortran && ~isempty(opt) && isfield(opt, 'residual') && opt.residual
-        use_fortran = false;
-    end
+% opt.residual (true residual mode) is not supported by Fortran backend
+if use_fortran && ~isempty(opt) && isfield(opt, 'residual') && opt.residual
+    use_fortran = false;
 end
 
 if use_fortran
@@ -202,7 +200,7 @@ if use_fortran
 
     % Map preconditioner type to Fortran integer code
     %   0 = none, 1 = ILU-left, 2 = ILU-split, 3 = Jacobi-split
-    pcond_type = 0;  % default: no preconditioning
+    pcond_type = 1;  % default: ILU-left
     droptol_f = 0.001;
 
     if ~isempty(opt) && isfield(opt, 'precond')
@@ -215,14 +213,15 @@ if use_fortran
                     pcond_type = 3;  % Jacobi-split
                 case 'none'
                     pcond_type = 0;
-                case 'left'
-                    pcond_type = 1;  % ILU-left
                 otherwise
-                    pcond_type = 0;
+                    pcond_type = 1;  % default ILU-left
             end
         elseif isnumeric(ptype)
             pcond_type = ptype;
         end
+    elseif (nargin < 5 || isempty(M1)) && (nargin < 6 || isempty(M2))
+        % No preconditioner requested at all
+        pcond_type = 0;
     end
 
     if ~isempty(opt) && isfield(opt, 'droptol')
@@ -673,6 +672,7 @@ if Qres0 < 1e-30
 end
 
 flag = 1;
+relres = 1;
 resv = zeros(maxit, 1);
 Qres_prev = inf;
 

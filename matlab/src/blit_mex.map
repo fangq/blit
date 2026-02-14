@@ -1,0 +1,8 @@
+BLQMR_MEX {
+  global:
+    mexFunction;
+    mexfunction_;
+    mexfilerequiredapiversion;
+  local:
+    *;
+};
