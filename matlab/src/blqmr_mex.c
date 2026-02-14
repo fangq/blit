@@ -164,40 +164,49 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs_in, const mxArray *prhs[])
 
     /* ---- Pin MATLAB's BLAS to 1 thread ---- */
     saved_threads = matlab_set_comp_threads(1);
+    /* Also set MKL env var directly - maxNumCompThreads may not affect MKL */
+    setenv("MKL_NUM_THREADS", "1", 1);
+    setenv("MKL_DYNAMIC", "FALSE", 1);
+
+    /* ---- Minimum nrhs padding for MKL AVX2 compatibility ---- */
+    /* MKL's AVX2 dgemm kernel reads 32 bytes (4 doubles) at a time.
+     * The Fortran solver allocates (nrhs x nrhs) workspace matrices on the
+     * stack. When nrhs < 4, these are smaller than 128 bytes and MKL
+     * over-reads past the allocation. Pad nrhs to at least 4 and use
+     * the multi-RHS entry point for all cases. */
+#define BLQMR_MIN_NRHS 4
 
     /* ---- Dispatch: real vs complex ---- */
     if (!is_complex) {
         /* ============ REAL PATH ============ */
         double *Ax_vals = mxGetPr(prhs[0]);
         double *B_vals  = mxGetPr(prhs[1]);
+        int nrhs_actual = num_rhs;
+        int nrhs_padded = (num_rhs < BLQMR_MIN_NRHS) ? BLQMR_MIN_NRHS : num_rhs;
 
-        if (num_rhs == 1) {
-            /* Single RHS */
-            plhs[0] = mxCreateDoubleMatrix(n, 1, mxREAL);
-            double *x = mxGetPr(plhs[0]);
+        double *B_pad = (double *)mxCalloc((mwSize)n * nrhs_padded, sizeof(double));
+        double *X_pad = (double *)mxCalloc((mwSize)n * nrhs_padded, sizeof(double));
+        memcpy(B_pad, B_vals, (mwSize)n * nrhs_actual * sizeof(double));
 
-            blqmr_solve_real_(&n, &nnz, Ap_f, Ai_f, Ax_vals, B_vals, x,
-                              &maxit, &qtol, &droptol, &pcond_type,
-                              &flag, &iter, &relres);
+        plhs[0] = mxCreateDoubleMatrix(n, nrhs_actual, mxREAL);
+
+        if (nblock > 0 && nblock < nrhs_padded) {
+            blqmr_solve_real_multi_omp_(
+                &n, &nnz, &nrhs_padded, &nblock, Ap_f, Ai_f, Ax_vals,
+                B_pad, X_pad,
+                &maxit, &qtol, &droptol, &pcond_type,
+                &flag, &iter, &relres);
         } else {
-            /* Multiple RHS */
-            plhs[0] = mxCreateDoubleMatrix(n, num_rhs, mxREAL);
-            double *X = mxGetPr(plhs[0]);
-
-            if (nblock > 0 && nblock < num_rhs) {
-                blqmr_solve_real_multi_omp_(
-                    &n, &nnz, &num_rhs, &nblock, Ap_f, Ai_f, Ax_vals,
-                    B_vals, X,
-                    &maxit, &qtol, &droptol, &pcond_type,
-                    &flag, &iter, &relres);
-            } else {
-                blqmr_solve_real_multi_(
-                    &n, &nnz, &num_rhs, Ap_f, Ai_f, Ax_vals,
-                    B_vals, X,
-                    &maxit, &qtol, &droptol, &pcond_type,
-                    &flag, &iter, &relres);
-            }
+            blqmr_solve_real_multi_(
+                &n, &nnz, &nrhs_padded, Ap_f, Ai_f, Ax_vals,
+                B_pad, X_pad,
+                &maxit, &qtol, &droptol, &pcond_type,
+                &flag, &iter, &relres);
         }
+
+        memcpy(mxGetPr(plhs[0]), X_pad, (mwSize)n * nrhs_actual * sizeof(double));
+        mxFree(B_pad);
+        mxFree(X_pad);
     } else {
         /* ============ COMPLEX PATH ============ */
         /* Pack MATLAB complex data into Fortran interleaved format */
@@ -214,27 +223,35 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs_in, const mxArray *prhs[])
                                      (mwSize)n * num_rhs);
 #endif
 
-        X_cplx = (double *)mxCalloc(2 * (mwSize)n * num_rhs, sizeof(double));
+        int nrhs_actual = num_rhs;
+        int nrhs_padded = (num_rhs < BLQMR_MIN_NRHS) ? BLQMR_MIN_NRHS : num_rhs;
 
-        if (num_rhs == 1) {
-            blqmr_solve_complex_(&n, &nnz, Ap_f, Ai_f, Ax_cplx, B_cplx, X_cplx,
-                                 &maxit, &qtol, &droptol, &pcond_type,
-                                 &flag, &iter, &relres);
-        } else {
-            if (nblock > 0 && nblock < num_rhs) {
-                blqmr_solve_complex_multi_omp_(
-                    &n, &nnz, &num_rhs, &nblock, Ap_f, Ai_f, Ax_cplx,
-                    B_cplx, X_cplx,
-                    &maxit, &qtol, &droptol, &pcond_type,
-                    &flag, &iter, &relres);
-            } else {
-                blqmr_solve_complex_multi_(
-                    &n, &nnz, &num_rhs, Ap_f, Ai_f, Ax_cplx,
-                    B_cplx, X_cplx,
-                    &maxit, &qtol, &droptol, &pcond_type,
-                    &flag, &iter, &relres);
-            }
+        X_cplx = (double *)mxCalloc(2 * (mwSize)n * nrhs_padded, sizeof(double));
+
+        /* Pad B if needed */
+        double *B_solve = B_cplx;
+        double *B_pad_cplx = NULL;
+        if (nrhs_padded > nrhs_actual) {
+            B_pad_cplx = (double *)mxCalloc(2 * (mwSize)n * nrhs_padded, sizeof(double));
+            memcpy(B_pad_cplx, B_cplx, 2 * (mwSize)n * nrhs_actual * sizeof(double));
+            B_solve = B_pad_cplx;
         }
+
+        if (nblock > 0 && nblock < nrhs_padded) {
+            blqmr_solve_complex_multi_omp_(
+                &n, &nnz, &nrhs_padded, &nblock, Ap_f, Ai_f, Ax_cplx,
+                B_solve, X_cplx,
+                &maxit, &qtol, &droptol, &pcond_type,
+                &flag, &iter, &relres);
+        } else {
+            blqmr_solve_complex_multi_(
+                &n, &nnz, &nrhs_padded, Ap_f, Ai_f, Ax_cplx,
+                B_solve, X_cplx,
+                &maxit, &qtol, &droptol, &pcond_type,
+                &flag, &iter, &relres);
+        }
+
+        if (B_pad_cplx) mxFree(B_pad_cplx);
 
         /* Copy result back to MATLAB complex output */
         plhs[0] = mxCreateDoubleMatrix(n, num_rhs, mxCOMPLEX);

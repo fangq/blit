@@ -1,4 +1,4 @@
-%BLQMR_TEST  Regression test for BLQMR solver (MATLAB + optional Fortran MEX).
+% BLQMR_TEST  Regression test for BLQMR solver (MATLAB + optional Fortran MEX).
 
 fprintf('BLIT BLQMR Test\n');
 fprintf('========================================\n');
@@ -19,7 +19,7 @@ Ax = [2., 3., 3., -1., 4., 4., -3., 1., 2., 2., 6., 1.];
 rows = Ai;
 cols = zeros(length(Ai), 1);
 for j = 1:n
-    cols(Ap(j):Ap(j+1)-1) = j;
+    cols(Ap(j):Ap(j + 1) - 1) = j;
 end
 A = sparse(rows, cols, Ax, n, n);
 
