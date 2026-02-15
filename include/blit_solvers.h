@@ -75,8 +75,8 @@ typedef struct Blit_ILUPcond {
     int nz;             /**< Number of non-zero elements in the sparse matrix */
     int status;         /**< Status code from last operation (-1 = uninitialized) */
     int iscomplex;      /**< Flag: 0 = real matrix, 1 = complex matrix */
-    void *numeric;      /**< UMFPACK numeric factorization handle (c_ptr) */
-    void *symbolic;     /**< UMFPACK symbolic factorization handle (c_ptr) */
+    void* numeric;      /**< UMFPACK numeric factorization handle (c_ptr) */
+    void* symbolic;     /**< UMFPACK symbolic factorization handle (c_ptr) */
     double control[20]; /**< UMFPACK control parameters array */
 } ILUPcond;
 
@@ -192,7 +192,7 @@ typedef struct Blit_F90Complex {
  *          - qtol = 1e-6, droptol = 1e-3, maxit = n
  *          - pcond_type = 1 (ILU-left), isquasires = 1
  */
-extern void DBLQMRCreate(BLQMRSolver *qmr, int *n);
+extern void DBLQMRCreate(BLQMRSolver* qmr, int* n);
 
 /**
  * @brief Build the preconditioner for a real sparse matrix
@@ -206,7 +206,7 @@ extern void DBLQMRCreate(BLQMRSolver *qmr, int *n);
  * @details The matrix is in Compressed Sparse Column (CSC) format.
  *          After this call, qmr->state is set to 1 (prepared).
  */
-extern void DBLQMRPrep(BLQMRSolver *qmr, int *Ap, int *Ai, double *Ax, int *nz);
+extern void DBLQMRPrep(BLQMRSolver* qmr, int* Ap, int* Ai, double* Ax, int* nz);
 
 /**
  * @brief Solve a real sparse linear system A*x = b
@@ -224,8 +224,8 @@ extern void DBLQMRPrep(BLQMRSolver *qmr, int *Ap, int *Ai, double *Ax, int *nz);
  *          qmr->iter contains iteration count, and qmr->relres
  *          contains the relative residual norm.
  */
-extern void DBLQMRSolve(BLQMRSolver *qmr, int *Ap, int *Ai, double *Ax,
-                        int *nz, double *x, double *b, int *nrhs);
+extern void DBLQMRSolve(BLQMRSolver* qmr, int* Ap, int* Ai, double* Ax,
+                        int* nz, double* x, double* b, int* nrhs);
 
 /**
  * @brief Destroy a real BLQMR solver and free resources
@@ -235,14 +235,14 @@ extern void DBLQMRSolve(BLQMRSolver *qmr, int *Ap, int *Ai, double *Ax,
  * @details Frees the ILU preconditioner and any allocated memory.
  *          After this call, qmr->state is set to -1.
  */
-extern void DBLQMRDestroy(BLQMRSolver *qmr);
+extern void DBLQMRDestroy(BLQMRSolver* qmr);
 
 /**
  * @brief Print the state of a real BLQMR solver in JSON format
  *
  * @param[in] qmr  Pointer to BLQMRSolver to print
  */
-extern void DBLQMRPrint(BLQMRSolver *qmr);
+extern void DBLQMRPrint(BLQMRSolver* qmr);
 
 /** @} */
 
@@ -260,7 +260,7 @@ extern void DBLQMRPrint(BLQMRSolver *qmr);
  *
  * @see DBLQMRCreate for parameter defaults
  */
-extern void ZBLQMRCreate(BLQMRSolver *qmr, int *n);
+extern void ZBLQMRCreate(BLQMRSolver* qmr, int* n);
 
 /**
  * @brief Build the preconditioner for a complex sparse matrix
@@ -271,7 +271,7 @@ extern void ZBLQMRCreate(BLQMRSolver *qmr, int *n);
  * @param[in,out] Ax   Complex non-zero values array (size nnz)
  * @param[in]     nz   Pointer to number of non-zeros
  */
-extern void ZBLQMRPrep(BLQMRSolver *qmr, int *Ap, int *Ai, F90Complex *Ax, int *nz);
+extern void ZBLQMRPrep(BLQMRSolver* qmr, int* Ap, int* Ai, F90Complex* Ax, int* nz);
 
 /**
  * @brief Solve a complex sparse linear system A*x = b
@@ -285,22 +285,22 @@ extern void ZBLQMRPrep(BLQMRSolver *qmr, int *Ap, int *Ai, F90Complex *Ax, int *
  * @param[in]     b     Complex right-hand side vectors (size n x nrhs)
  * @param[in]     nrhs  Pointer to number of right-hand sides
  */
-extern void ZBLQMRSolve(BLQMRSolver *qmr, int *Ap, int *Ai, F90Complex *Ax,
-                        int *nz, F90Complex *x, F90Complex *b, int *nrhs);
+extern void ZBLQMRSolve(BLQMRSolver* qmr, int* Ap, int* Ai, F90Complex* Ax,
+                        int* nz, F90Complex* x, F90Complex* b, int* nrhs);
 
 /**
  * @brief Destroy a complex BLQMR solver and free resources
  *
  * @param[in,out] qmr  Pointer to BLQMRSolver to destroy
  */
-extern void ZBLQMRDestroy(BLQMRSolver *qmr);
+extern void ZBLQMRDestroy(BLQMRSolver* qmr);
 
 /**
  * @brief Print the state of a complex BLQMR solver in JSON format
  *
  * @param[in] qmr  Pointer to BLQMRSolver to print
  */
-extern void ZBLQMRPrint(BLQMRSolver *qmr);
+extern void ZBLQMRPrint(BLQMRSolver* qmr);
 
 /** @} */
 
@@ -317,7 +317,7 @@ extern void ZBLQMRPrint(BLQMRSolver *qmr);
  * @param[in]     n    Pointer to matrix dimension
  * @param[in]     nz   Pointer to number of non-zeros
  */
-extern void ILUPcondCreate(ILUPcond *ilu, int *n, int *nz);
+extern void ILUPcondCreate(ILUPcond* ilu, int* n, int* nz);
 
 /**
  * @brief Compute ILU factorization of a sparse matrix
@@ -329,8 +329,8 @@ extern void ILUPcondCreate(ILUPcond *ilu, int *n, int *nz);
  * @param[in]     droptol  Pointer to drop tolerance for incomplete factorization
  * @param[in]     Az       Imaginary part of non-zero values (NULL for real matrices)
  */
-extern void ILUPcondPrep(ILUPcond *ilu, int *Ap, int *Ai, double *Ax,
-                         double *droptol, double *Az);
+extern void ILUPcondPrep(ILUPcond* ilu, int* Ap, int* Ai, double* Ax,
+                         double* droptol, double* Az);
 
 /**
  * @brief Solve a system using the ILU preconditioner: (LU)*x = b
@@ -347,16 +347,16 @@ extern void ILUPcondPrep(ILUPcond *ilu, int *Ap, int *Ai, double *Ax,
  * @param[out]    xz    Imaginary part of solution (NULL for real)
  * @param[in]     bz    Imaginary part of right-hand side (NULL for real)
  */
-extern void ILUPcondSolve(ILUPcond *ilu, int *Ap, int *Ai, double *Ax,
-                          int *rows, int *cols, double *x, double *b,
-                          double *Az, double *xz, double *bz);
+extern void ILUPcondSolve(ILUPcond* ilu, int* Ap, int* Ai, double* Ax,
+                          int* rows, int* cols, double* x, double* b,
+                          double* Az, double* xz, double* bz);
 
 /**
  * @brief Destroy an ILU preconditioner and free UMFPACK resources
  *
  * @param[in,out] ilu  Pointer to ILUPcond to destroy
  */
-extern void ILUPcondDestroy(ILUPcond *ilu);
+extern void ILUPcondDestroy(ILUPcond* ilu);
 
 /** @} */
 
@@ -390,15 +390,15 @@ extern void ILUPcondDestroy(ILUPcond *ilu);
 template <class T>
 class BlitILU {
 
-private:
+  private:
     ILUPcond ilu;       /**< Internal ILU preconditioner structure */
-    int    *Ap;         /**< Column pointers (stored reference) */
-    int    *Ai;         /**< Row indices (stored reference) */
-    double *Ax;         /**< Real part of values (stored reference) */
-    double *Az;         /**< Imaginary part of values (stored reference) */
+    int*    Ap;         /**< Column pointers (stored reference) */
+    int*    Ai;         /**< Row indices (stored reference) */
+    double* Ax;         /**< Real part of values (stored reference) */
+    double* Az;         /**< Imaginary part of values (stored reference) */
     int nz;             /**< Number of non-zeros */
 
-public:
+  public:
     /**
      * @brief Construct an ILU preconditioner
      *
@@ -430,12 +430,16 @@ public:
      * @param droptol  Drop tolerance for incomplete factorization
      * @param Azz      Pointer to imaginary values array (optional)
      */
-    void Run(int **App, int **Aii, double **Axx, double droptol,
-             double **Azz = BLIT_NULL) {
+    void Run(int** App, int** Aii, double** Axx, double droptol,
+             double** Azz = BLIT_NULL) {
         Ap = *App;
         Ai = *Aii;
         Ax = *Axx;
-        if (Azz != BLIT_NULL) Az = *Azz;
+
+        if (Azz != BLIT_NULL) {
+            Az = *Azz;
+        }
+
         ILUPcondPrep(&ilu, Ap, Ai, Ax, &droptol, Az);
     }
 
@@ -452,10 +456,16 @@ public:
      * @throws beNoLHS if matrix not factorized
      * @throws beNoRHS if x or b is null
      */
-    void Solve(int nrow, int ncol, double *x, double *b,
-               double *xz = BLIT_NULL, double *bz = BLIT_NULL) {
-        if (nz == 0 || Ap == 0) throw(beNoLHS);
-        if (x == 0 || b == 0) throw(beNoRHS);
+    void Solve(int nrow, int ncol, double* x, double* b,
+               double* xz = BLIT_NULL, double* bz = BLIT_NULL) {
+        if (nz == 0 || Ap == 0) {
+            throw (beNoLHS);
+        }
+
+        if (x == 0 || b == 0) {
+            throw (beNoRHS);
+        }
+
         ILUPcondSolve(&ilu, Ap, Ai, Ax, &nrow, &ncol, x, b, Az, xz, bz);
     }
 };
@@ -485,14 +495,14 @@ public:
 template <class T>
 class BlitBLQMR {
 
-private:
+  private:
     BLQMRSolver qmr;    /**< Internal solver structure */
-    int *Ap;            /**< Column pointers (owned copy) */
-    int *Ai;            /**< Row indices (owned copy) */
-    T   *Ax;            /**< Matrix values (owned copy) */
+    int* Ap;            /**< Column pointers (owned copy) */
+    int* Ai;            /**< Row indices (owned copy) */
+    T*   Ax;            /**< Matrix values (owned copy) */
     int nz;             /**< Number of non-zeros */
 
-public:
+  public:
     /**
      * @brief Construct a BLQMR solver with default parameters
      *
@@ -505,12 +515,14 @@ public:
         Ai = BLIT_NULL;
         Ax = BLIT_NULL;
         nz = 0;
-        if (sizeof(T) == sizeof(double))
+
+        if (sizeof(T) == sizeof(double)) {
             DBLQMRCreate(&qmr, &n);
-        else if (sizeof(T) == sizeof(F90Complex))
+        } else if (sizeof(T) == sizeof(F90Complex)) {
             ZBLQMRCreate(&qmr, &n);
-        else
+        } else {
             throw beTypeMismatch;
+        }
     }
 
     /**
@@ -531,12 +543,15 @@ public:
         Ai = BLIT_NULL;
         Ax = BLIT_NULL;
         nz = 0;
-        if (sizeof(T) == sizeof(double))
+
+        if (sizeof(T) == sizeof(double)) {
             DBLQMRCreate(&qmr, &qmr.n);
-        else if (sizeof(T) == sizeof(F90Complex))
+        } else if (sizeof(T) == sizeof(F90Complex)) {
             ZBLQMRCreate(&qmr, &qmr.n);
-        else
+        } else {
             throw beTypeMismatch;
+        }
+
         qmr.n = n;
         qmr.nrhs = nrhs;
         qmr.maxit = maxit;
@@ -553,15 +568,25 @@ public:
      *       Type validation occurs in constructor, so no mismatch possible here.
      */
     ~BlitBLQMR() noexcept {
-        if (sizeof(T) == sizeof(double))
+        if (sizeof(T) == sizeof(double)) {
             DBLQMRDestroy(&qmr);
-        else if (sizeof(T) == sizeof(F90Complex))
+        } else if (sizeof(T) == sizeof(F90Complex)) {
             ZBLQMRDestroy(&qmr);
+        }
+
         /* Note: Type mismatch is impossible here - constructor would have thrown */
 
-        if (Ap) delete[] Ap;
-        if (Ai) delete[] Ai;
-        if (Ax) delete[] Ax;
+        if (Ap) {
+            delete[] Ap;
+        }
+
+        if (Ai) {
+            delete[] Ai;
+        }
+
+        if (Ax) {
+            delete[] Ax;
+        }
     }
 
     /**
@@ -576,10 +601,18 @@ public:
      *          the preconditioner. Can be called multiple times to
      *          update the matrix.
      */
-    void Prepare(int *App, int *Aii, T *Axx, int nzz) {
-        if (Ap) delete[] Ap;
-        if (Ai) delete[] Ai;
-        if (Ax) delete[] Ax;
+    void Prepare(int* App, int* Aii, T* Axx, int nzz) {
+        if (Ap) {
+            delete[] Ap;
+        }
+
+        if (Ai) {
+            delete[] Ai;
+        }
+
+        if (Ax) {
+            delete[] Ax;
+        }
 
         nz = nzz;
         Ap = new int[qmr.n + 1];
@@ -590,12 +623,15 @@ public:
         memcpy(Ax, Axx, sizeof(T) * nz);
 
         printf("Ap address before: %lx\n", (unsigned long)Ap);
-        if (sizeof(T) == sizeof(double))
-            DBLQMRPrep(&qmr, Ap, Ai, (double *)Ax, &nz);
-        else if (sizeof(T) == sizeof(F90Complex))
-            ZBLQMRPrep(&qmr, Ap, Ai, (F90Complex *)Ax, &nz);
-        else
+
+        if (sizeof(T) == sizeof(double)) {
+            DBLQMRPrep(&qmr, Ap, Ai, (double*)Ax, &nz);
+        } else if (sizeof(T) == sizeof(F90Complex)) {
+            ZBLQMRPrep(&qmr, Ap, Ai, (F90Complex*)Ax, &nz);
+        } else {
             throw beTypeMismatch;
+        }
+
         printf("Ap address after: %lx\n", (unsigned long)Ap);
     }
 
@@ -612,30 +648,37 @@ public:
      * @details After solving, check qmr.flag for convergence status
      *          and qmr.relres for the achieved relative residual.
      */
-    void Solve(T *x, T *b, int nrhs) {
-        if (nz == 0 || Ap == BLIT_NULL) throw(beNoLHS);
-        if (x == BLIT_NULL || b == BLIT_NULL) throw(beNoRHS);
+    void Solve(T* x, T* b, int nrhs) {
+        if (nz == 0 || Ap == BLIT_NULL) {
+            throw (beNoLHS);
+        }
+
+        if (x == BLIT_NULL || b == BLIT_NULL) {
+            throw (beNoRHS);
+        }
 
         if (sizeof(T) == sizeof(double))
-            DBLQMRSolve(&qmr, Ap, Ai, (double *)Ax, &nz, (double *)x,
-                        (double *)b, &nrhs);
+            DBLQMRSolve(&qmr, Ap, Ai, (double*)Ax, &nz, (double*)x,
+                        (double*)b, &nrhs);
         else if (sizeof(T) == sizeof(F90Complex))
-            ZBLQMRSolve(&qmr, Ap, Ai, (F90Complex *)Ax, &nz, (F90Complex *)x,
-                        (F90Complex *)b, &nrhs);
-        else
+            ZBLQMRSolve(&qmr, Ap, Ai, (F90Complex*)Ax, &nz, (F90Complex*)x,
+                        (F90Complex*)b, &nrhs);
+        else {
             throw beTypeMismatch;
+        }
     }
 
     /**
      * @brief Print solver state in JSON format
      */
     void Print() {
-        if (sizeof(T) == sizeof(double))
+        if (sizeof(T) == sizeof(double)) {
             DBLQMRPrint(&qmr);
-        else if (sizeof(T) == sizeof(F90Complex))
+        } else if (sizeof(T) == sizeof(F90Complex)) {
             ZBLQMRPrint(&qmr);
-        else
+        } else {
             throw beTypeMismatch;
+        }
     }
 };
 

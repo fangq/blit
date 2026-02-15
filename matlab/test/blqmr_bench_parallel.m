@@ -86,7 +86,12 @@ for gi = 1:length(grid_sizes)
                 repmat('-', 1, 28), '----------', '------', '------', '------------', '----------');
 
         % Generate RHS
-        rng(42);
+        if exist('rng', 'file')
+            rng(42);
+        else
+            rand('state', 42);
+            randn('state', 42);
+        end
         B = create_distributed_sources(node, elem, nrhs);
 
         % Reference: direct solver

@@ -22,6 +22,6 @@ pretty:
 	    --suffix=none \
 	    --formatted \
 	    --break-blocks \
-	   "include/*.h" "cpp/example/*.c*"
+	   "include/*.h" "cpp/example/*.c*" "matlab/src/*.c" "src/*.c"
 
 .DEFAULT_GOAL=all

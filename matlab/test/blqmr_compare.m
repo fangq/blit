@@ -15,7 +15,7 @@ end
 
 % Print thread info
 fprintf('Environment:\n');
-fprintf('  MATLAB threads (maxNumCompThreads): %d\n', maxNumCompThreads);
+% fprintf('  MATLAB threads (maxNumCompThreads): %d\n', maxNumCompThreads);
 try
     nthreads_omp = str2double(getenv('OMP_NUM_THREADS'));
     if isnan(nthreads_omp)
@@ -44,7 +44,12 @@ nruns = 3;
 % Test 1: Real SPD, single RHS
 % =====================================================================
 fprintf('--- Test 1: Real SPD (n~4000, nrhs=1) ---\n');
-rng(42);
+if exist('rng', 'file')
+    rng(42);
+else
+    rand('state', 42);
+    randn('state', 42);
+end
 A = gallery('poisson', 64);  % 4096x4096
 n = size(A, 1);
 b = randn(n, 1);
