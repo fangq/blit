@@ -4,11 +4,15 @@
 # Usage:
 #   make              - build MEX file for MATLAB
 #   make oct          - build .mex file for Octave
+#   make bundle       - copy shared library deps for deployment (Linux)
 #   make clean        - remove build artifacts
 #   make test         - run MATLAB test
 #   make testoct      - run Octave test
 #
-# Supported platforms: Linux, macOS, Windows (MSYS2/MinGW64)
+# Build requirements:
+#   Linux:   sudo apt install libopenblas-dev libsuitesparse-dev patchelf
+#   macOS:   brew install openblas suite-sparse
+#   Windows: pacman -S mingw-w64-x86_64-openblas mingw-w64-x86_64-suitesparse
 #
 # This Makefile lives in blit/matlab/src/
 # =============================================================================
@@ -30,7 +34,6 @@ MKFILE_DIR  := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 MEX_DIR     := $(abspath $(MKFILE_DIR)/..)
 ROOT_DIR    := $(abspath $(MEX_DIR)/..)
 SRC_DIR     := $(ROOT_DIR)/src
-PRIVATE_DIR := $(MEX_DIR)/private
 BUILD_DIR   := $(MKFILE_DIR)/build
 
 # ---------- Compilers ----------
@@ -72,7 +75,7 @@ else
   CFLAGS    := -O3 -fPIC
 endif
 
-# ---------- SuiteSparse ----------
+# ---------- SuiteSparse detection ----------
 ifeq ($(PLATFORM),macos)
   SS_INC_SEARCH := /opt/homebrew/include/suitesparse /usr/local/include/suitesparse \
                    /opt/homebrew/include /usr/local/include
@@ -111,76 +114,74 @@ UMFPACK_LIBS += $(call _try_lib,ccolamd)
 UMFPACK_LIBS += $(call _try_lib,suitesparseconfig)
 UMFPACK_LIBS += $(call _try_lib,metis)
 
-# ---------- Version script (hides BLAS symbols from MATLAB's MKL) ----------
-VERSION_MAP := $(MKFILE_DIR)/blit_mex.map
-
-# ---------- Static BLAS/LAPACK for MATLAB MEX ----------
+# ---------- BLAS/LAPACK detection ----------
 ifeq ($(PLATFORM),linux)
-  NETLIB_BLAS   := $(firstword $(wildcard \
-      /usr/lib/x86_64-linux-gnu/blas/libblas.a \
-      /usr/lib/blas/libblas.a))
-  NETLIB_LAPACK := $(firstword $(wildcard \
-      /usr/lib/x86_64-linux-gnu/lapack/liblapack.a \
-      /usr/lib/lapack/liblapack.a))
-  OPENBLAS_A    := $(firstword $(wildcard \
-      /usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.a \
-      /usr/lib/x86_64-linux-gnu/openblas-serial/libblas.a \
-      /usr/lib/x86_64-linux-gnu/libblas.a))
-
-  ifneq ($(NETLIB_BLAS),)
-    STATIC_BLAS_LAPACK = -Wl,--allow-multiple-definition $(NETLIB_LAPACK) $(NETLIB_BLAS)
-  else ifneq ($(OPENBLAS_A),)
-    STATIC_BLAS_LAPACK = -Wl,--whole-archive $(OPENBLAS_A) -Wl,--no-whole-archive
+  # Prefer OpenBLAS (multi-threaded) over reference BLAS.
+  # Cannot use MATLAB's -lmwblas: it uses ILP64 (64-bit ints),
+  # gfortran BLAS calls use LP64 (32-bit ints) — mixing crashes.
+  OPENBLAS_SO := $(firstword $(wildcard \
+      /usr/lib/x86_64-linux-gnu/openblas-pthread/libopenblas.so.0 \
+      /usr/lib/x86_64-linux-gnu/openblas-openmp/libopenblas.so.0 \
+      /usr/lib/x86_64-linux-gnu/libopenblas.so.0 \
+      /usr/lib/x86_64-linux-gnu/openblas-serial/libopenblas.so.0))
+  ifneq ($(OPENBLAS_SO),)
+    OPENBLAS_DIR := $(dir $(OPENBLAS_SO))
+    BLAS_LAPACK_LIBS = -L$(OPENBLAS_DIR) -lopenblas
   else
-    $(error No static libblas.a found. Install libblas-dev or libopenblas-dev)
+    BLAS_LAPACK_LIBS = -llapack -lblas
   endif
-
-  MEXLINKLIBS = -L$(MATLAB_LIB) -Wl,-rpath-link,$(MATLAB_LIB) -lmx -lmex \
-                $(SS_LIB_FLAGS) $(UMFPACK_LIBS) \
-                $(STATIC_BLAS_LAPACK) \
-                -lgfortran -lgomp -lm \
-                -Wl,-Bsymbolic -Wl,--version-script,$(VERSION_MAP)
 
 else ifeq ($(PLATFORM),macos)
   OPENBLAS_PREFIX := $(shell brew --prefix openblas 2>/dev/null)
   ifneq ($(OPENBLAS_PREFIX),)
     OPENBLAS_MACOS_A := $(wildcard $(OPENBLAS_PREFIX)/lib/libopenblas.a)
     ifneq ($(OPENBLAS_MACOS_A),)
-      STATIC_BLAS_LAPACK = -force_load $(OPENBLAS_MACOS_A)
+      BLAS_LAPACK_LIBS = -force_load $(OPENBLAS_MACOS_A)
     else
-      STATIC_BLAS_LAPACK = -L$(OPENBLAS_PREFIX)/lib -lopenblas
+      BLAS_LAPACK_LIBS = -L$(OPENBLAS_PREFIX)/lib -lopenblas
     endif
   else
-    STATIC_BLAS_LAPACK = -framework Accelerate
+    BLAS_LAPACK_LIBS = -framework Accelerate
   endif
+endif
 
-  MEXLINKLIBS = -L$(MATLAB_LIB) -Wl,-rpath,$(MATLAB_LIB) -lmx -lmex \
+# ---------- Version script (Linux: hides internal symbols from MATLAB) ------
+VERSION_MAP := $(MKFILE_DIR)/blit_mex.map
+
+# ---------- MATLAB MEX link libraries ----------
+ifeq ($(PLATFORM),linux)
+  MEXLINKLIBS = -L$(MATLAB_LIB) -Wl,-rpath-link,$(MATLAB_LIB) -lmx -lmex \
+                $(BLAS_LAPACK_LIBS) \
                 $(SS_LIB_FLAGS) $(UMFPACK_LIBS) \
-                $(STATIC_BLAS_LAPACK) \
+                -lgfortran -lgomp -lm -lpthread \
+                -static-libgcc \
+                -Wl,-Bsymbolic -Wl,--version-script,$(VERSION_MAP)
+
+else ifeq ($(PLATFORM),macos)
+  MEXLINKLIBS = -L$(MATLAB_LIB) -Wl,-rpath,$(MATLAB_LIB) -lmx -lmex \
+                $(BLAS_LAPACK_LIBS) \
+                $(SS_LIB_FLAGS) $(UMFPACK_LIBS) \
                 -lgfortran -lgomp -lm \
+                -Wl,-rpath,@loader_path/blqmr_deps \
                 -Wl,-exported_symbol,_mexFunction \
                 -Wl,-exported_symbol,_mexfunction_
 
 else
   MEXLINKLIBS = -L$(MATLAB_LIB) -lmx -lmex \
+                -lopenblas \
                 $(SS_LIB_FLAGS) $(UMFPACK_LIBS) \
-                -lopenblas -lgfortran -lgomp -lm \
+                -lgfortran -lgomp -lm \
                 -static-libgcc -static-libgfortran \
                 -Wl,-Bstatic -lgomp -lwinpthread -Wl,-Bdynamic
 endif
 
 # ---------- Octave link libraries ----------
-# Use static Netlib BLAS for Octave too (avoids OpenBLAS complex issues)
 ifeq ($(PLATFORM),linux)
-  ifneq ($(NETLIB_BLAS),)
-    OCT_LINKLIBS = $(SS_LIB_FLAGS) $(UMFPACK_LIBS) \
-                   -Wl,--allow-multiple-definition $(NETLIB_LAPACK) $(NETLIB_BLAS) \
-                   -lgfortran -lgomp -lm
-  else
-    OCT_LINKLIBS = $(SS_LIB_FLAGS) $(UMFPACK_LIBS) -llapack -lblas -lgfortran -lgomp -lm
-  endif
+  OCT_LINKLIBS = $(SS_LIB_FLAGS) $(UMFPACK_LIBS) $(BLAS_LAPACK_LIBS) \
+                 -lgfortran -lgomp -lm -static-libgcc
 else
-  OCT_LINKLIBS = $(SS_LIB_FLAGS) $(UMFPACK_LIBS) -llapack -lblas -lgfortran -lgomp -lm
+  OCT_LINKLIBS = $(SS_LIB_FLAGS) $(UMFPACK_LIBS) -llapack -lblas \
+                 -lgfortran -lgomp -lm
 endif
 
 # ---------- Source files ----------
@@ -194,17 +195,15 @@ F_SRCS := $(SRC_DIR)/blit_const.f90 \
 C_SRCS := $(SRC_DIR)/umf4_f77wrapper.c \
           $(SRC_DIR)/blit_blas_threads.c
 
-# ---------- MATLAB MEX files ----------
+# ---------- MATLAB MEX objects ----------
 MEX_GATE     := $(MKFILE_DIR)/blqmr_mex.f90
 MEX_GATE_OBJ := $(BUILD_DIR)/blqmr_mex.o
-
 F_OBJS := $(patsubst $(SRC_DIR)/%.f90,$(BUILD_DIR)/%.o,$(F_SRCS))
 C_OBJS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(C_SRCS))
 ALL_OBJS := $(F_OBJS) $(C_OBJS)
-
 TARGET := $(MEX_DIR)/blqmr_.$(MEX_EXT)
 
-# ---------- Octave MEX files ----------
+# ---------- Octave MEX objects ----------
 BUILD_DIR_OCT := $(BUILD_DIR)/oct
 OCT_MEX_GATE  := $(MKFILE_DIR)/blqmr_mex.c
 OCT_GATE_OBJ  := $(BUILD_DIR_OCT)/blqmr_mex.o
@@ -213,11 +212,15 @@ OCT_C_OBJS    := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR_OCT)/%.o,$(C_SRCS))
 OCT_ALL_OBJS  := $(OCT_F_OBJS) $(OCT_C_OBJS)
 OCT_TARGET    := $(MEX_DIR)/blqmr_.mex
 
+# ---------- Bundle paths ----------
+BUNDLE_DIR    := $(MEX_DIR)/blqmr_deps
+BUNDLE_SCRIPT := $(MKFILE_DIR)/bundle_deps.sh
+
 # =============================================================================
-# Rules
+# Top-level targets
 # =============================================================================
 
-.PHONY: all oct clean test testoct dirs
+.PHONY: all oct clean bundle test testoct dirs
 
 all: dirs $(TARGET)
 
@@ -237,6 +240,10 @@ ifeq ($(PLATFORM),windows)
 $(TARGET): $(MEX_GATE_OBJ) $(ALL_OBJS)
 	$(FC) -shared -o $@ $(MEX_GATE_OBJ) $(ALL_OBJS) $(MEXLINKLIBS) \
 	  -Wl,--output-def,$(BUILD_DIR)/blqmr_.def
+else ifeq ($(PLATFORM),linux)
+$(TARGET): $(MEX_GATE_OBJ) $(ALL_OBJS)
+	$(FC) -shared -o $@ $(MEX_GATE_OBJ) $(ALL_OBJS) $(MEXLINKLIBS)
+	patchelf --set-rpath '$$ORIGIN/blqmr_deps' $@
 else
 $(TARGET): $(MEX_GATE_OBJ) $(ALL_OBJS)
 	$(FC) -shared -o $@ $(MEX_GATE_OBJ) $(ALL_OBJS) $(MEXLINKLIBS)
@@ -274,8 +281,14 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | dirs
 $(OCT_GATE_OBJ): $(OCT_MEX_GATE) $(OCT_F_OBJS) | dirs
 	$(MKOCTFILE) --mex -c $(SS_INC_FLAGS) $< -o $@
 
+ifeq ($(PLATFORM),linux)
 $(OCT_TARGET): $(OCT_GATE_OBJ) $(OCT_ALL_OBJS)
 	$(MKOCTFILE) --mex $(OCT_GATE_OBJ) $(OCT_ALL_OBJS) $(OCT_LINKLIBS) -o $@
+	patchelf --set-rpath '$$ORIGIN/blqmr_deps' $@
+else
+$(OCT_TARGET): $(OCT_GATE_OBJ) $(OCT_ALL_OBJS)
+	$(MKOCTFILE) --mex $(OCT_GATE_OBJ) $(OCT_ALL_OBJS) $(OCT_LINKLIBS) -o $@
+endif
 
 # ---------- Octave Fortran objects ----------
 $(BUILD_DIR_OCT)/blit_const.o: $(SRC_DIR)/blit_const.f90 | dirs
@@ -303,12 +316,42 @@ $(BUILD_DIR_OCT)/%.o: $(SRC_DIR)/%.c | dirs
 	$(CC) $(CFLAGS) $(SS_INC_FLAGS) -c $< -o $@
 
 # =============================================================================
+# Bundle shared library dependencies for deployment
+# =============================================================================
+#
+# Collects non-system shared library deps into blqmr_deps/ alongside the MEX.
+# The MEX rpath ($ORIGIN/blqmr_deps, set by patchelf during build) ensures
+# bundled libs are found first at runtime.
+#
+# Requires: bundle_deps.sh (in this directory), patchelf (Linux)
+# To deploy: ship blqmr_.mexa64 + blqmr_deps/ + .m files together.
+
+bundle: $(TARGET)
+	@echo "=== Bundling shared library dependencies ==="
+	@rm -rf $(BUNDLE_DIR)
+	@sh $(BUNDLE_SCRIPT) $(TARGET) $(BUNDLE_DIR)
+	@if [ -f $(OCT_TARGET) ]; then \
+	    echo "Also bundling Octave MEX dependencies..."; \
+	    sh $(BUNDLE_SCRIPT) $(OCT_TARGET) $(BUNDLE_DIR); \
+	fi
+	@echo ""
+	@echo "=== Bundle complete ==="
+	@echo "Deploy these together:"
+	@echo "  $(TARGET)"
+	@test -f $(OCT_TARGET) && echo "  $(OCT_TARGET)" || true
+	@echo "  $(BUNDLE_DIR)/"
+	@ls -lh $(BUNDLE_DIR)/
+	@echo ""
+	@echo "Verify: LD_LIBRARY_PATH=$(BUNDLE_DIR) ldd $(TARGET)"
+
+# =============================================================================
 # Housekeeping
 # =============================================================================
 
 clean:
 	rm -rf $(BUILD_DIR)
 	rm -f $(MEX_DIR)/blqmr_.mex*
+	rm -rf $(BUNDLE_DIR)
 
 test:
 	matlab -batch "addpath('$(MEX_DIR)'); blqmr_compare"
