@@ -6,16 +6,24 @@
 #   make clean        - remove build artifacts
 #   make test         - run MATLAB test
 #
+# Supported platforms: Linux, macOS, Windows (MSYS2/MinGW64)
+#
 # This Makefile lives in blit/matlab/src/
 # =============================================================================
 
 UNAME := $(shell uname -s)
 ifeq ($(UNAME),Darwin)
   PLATFORM := macos
+else ifneq (,$(findstring MINGW64,$(UNAME)))
+  PLATFORM := windows
+else ifneq (,$(findstring MSYS,$(UNAME)))
+  PLATFORM := windows
+else ifneq (,$(findstring CYGWIN,$(UNAME)))
+  PLATFORM := windows
 else ifeq ($(UNAME),Linux)
   PLATFORM := linux
 else
-  PLATFORM := windows
+  PLATFORM := linux
 endif
 
 MKFILE_DIR  := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
@@ -28,12 +36,26 @@ BUILD_DIR   := $(MKFILE_DIR)/build
 FC          ?= gfortran
 CC          ?= gcc
 
-MATLAB_DIR  ?= $(shell dirname $$(dirname $$(readlink -f $$(which mex))) 2>/dev/null)
+# ---------- MATLAB detection ----------
+ifeq ($(PLATFORM),windows)
+  MATLAB_DIR  ?= $(shell where matlab 2>nul | head -1 | xargs dirname 2>/dev/null | xargs dirname 2>/dev/null)
+  ifeq ($(MATLAB_DIR),)
+    MATLAB_DIR ?= C:/Program Files/MATLAB/R2024b
+  endif
+else
+  MATLAB_DIR  ?= $(shell dirname $$(dirname $$(readlink -f $$(which mex))) 2>/dev/null)
+endif
+
 MATLAB_INC  := $(MATLAB_DIR)/extern/include
 
 ifeq ($(PLATFORM),macos)
-  MEX_EXT   := $(shell mexext 2>/dev/null || echo mexmaca64)
-  MATLAB_LIB:= $(MATLAB_DIR)/bin/maca64
+  ifeq ($(shell uname -m),arm64)
+    MEX_EXT   := $(shell mexext 2>/dev/null || echo mexmaca64)
+    MATLAB_LIB:= $(MATLAB_DIR)/bin/maca64
+  else
+    MEX_EXT   := $(shell mexext 2>/dev/null || echo mexmaci64)
+    MATLAB_LIB:= $(MATLAB_DIR)/bin/maci64
+  endif
 else ifeq ($(PLATFORM),linux)
   MEX_EXT   := $(shell mexext 2>/dev/null || echo mexa64)
   MATLAB_LIB:= $(MATLAB_DIR)/bin/glnxa64
@@ -42,20 +64,42 @@ else
   MATLAB_LIB:= $(MATLAB_DIR)/bin/win64
 endif
 
-FFLAGS      := -O3 -cpp -fPIC -fopenmp
-CFLAGS      := -O3 -fPIC
+# ---------- Compiler flags ----------
+FFLAGS_BASE := -O3 -cpp -fPIC -fopenmp
+CFLAGS_BASE := -O3 -fPIC
+
+ifeq ($(PLATFORM),windows)
+  # MinGW: no -fPIC needed
+  FFLAGS    := -O3 -cpp -fopenmp
+  CFLAGS    := -O3
+else
+  FFLAGS    := $(FFLAGS_BASE)
+  CFLAGS    := $(CFLAGS_BASE)
+endif
 
 # ---------- SuiteSparse ----------
-SS_INC_SEARCH := /opt/homebrew/include/suitesparse \
-                 /usr/local/include/suitesparse \
-                 /usr/include/suitesparse \
-                 /opt/homebrew/include \
-                 /usr/local/include
-
-SS_LIB_SEARCH := /opt/homebrew/lib \
-                 /usr/local/lib \
-                 /usr/lib/x86_64-linux-gnu \
-                 /opt/homebrew/opt/suite-sparse/lib
+ifeq ($(PLATFORM),macos)
+  SS_INC_SEARCH := /opt/homebrew/include/suitesparse \
+                   /usr/local/include/suitesparse \
+                   /opt/homebrew/include \
+                   /usr/local/include
+  SS_LIB_SEARCH := /opt/homebrew/lib \
+                   /usr/local/lib \
+                   /opt/homebrew/opt/suite-sparse/lib
+else ifeq ($(PLATFORM),windows)
+  SS_INC_SEARCH := /mingw64/include/suitesparse \
+                   /mingw64/include \
+                   /ucrt64/include/suitesparse \
+                   /ucrt64/include
+  SS_LIB_SEARCH := /mingw64/lib \
+                   /ucrt64/lib
+else
+  SS_INC_SEARCH := /usr/include/suitesparse \
+                   /usr/local/include/suitesparse \
+                   /usr/local/include
+  SS_LIB_SEARCH := /usr/local/lib \
+                   /usr/lib/x86_64-linux-gnu
+endif
 
 SS_INC_DIRS :=
 ifdef UMFPACK_INC
@@ -75,7 +119,7 @@ SS_LIB_FLAGS := $(addprefix -L,$(SS_LIB_DIRS))
 UMFPACK_LIBS := -lumfpack -lamd
 
 _try_lib = $(if $(shell for d in $(SS_LIB_DIRS); do \
-    test -f "$$d/lib$(1).a" -o -f "$$d/lib$(1).so" -o -f "$$d/lib$(1).dylib" && echo y; \
+    test -f "$$d/lib$(1).a" -o -f "$$d/lib$(1).so" -o -f "$$d/lib$(1).dylib" -o -f "$$d/lib$(1).dll.a" && echo y; \
   done),-l$(1),)
 
 UMFPACK_LIBS += $(call _try_lib,cholmod)
@@ -85,43 +129,77 @@ UMFPACK_LIBS += $(call _try_lib,ccolamd)
 UMFPACK_LIBS += $(call _try_lib,suitesparseconfig)
 UMFPACK_LIBS += $(call _try_lib,metis)
 
-# ---------- Link libraries ----------
+# ---------- Version script (Linux/macOS: hide BLAS from MKL interposition) ----------
 VERSION_MAP := $(MKFILE_DIR)/blit_mex.map
 
-# ---------- Find static BLAS/LAPACK ----------
-# Need BLAS statically linked so dgemm_ is defined inside the .mexa64,
-# hidden by version script to prevent MATLAB's MKL from interposing.
-#
-# Priority: Netlib reference (separate blas/lapack dirs), then OpenBLAS.
-# OpenBLAS bundles LAPACK inside libblas.a, so only one archive is needed.
-NETLIB_BLAS   := $(firstword $(wildcard \
-    /usr/lib/x86_64-linux-gnu/blas/libblas.a \
-    /usr/lib/blas/libblas.a))
-NETLIB_LAPACK := $(firstword $(wildcard \
-    /usr/lib/x86_64-linux-gnu/lapack/liblapack.a \
-    /usr/lib/lapack/liblapack.a))
-OPENBLAS_A    := $(firstword $(wildcard \
-    /usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.a \
-    /usr/lib/x86_64-linux-gnu/openblas-serial/libblas.a \
-    /usr/lib/x86_64-linux-gnu/libblas.a))
+# ---------- Static BLAS/LAPACK ----------
+# MATLAB's MKL intercepts dgemm_ at runtime, causing crashes.
+# Statically link BLAS so dgemm_ is defined inside the .mexa64/.mexmaca64,
+# then hidden by version script / -Bsymbolic.
 
-ifneq ($(NETLIB_BLAS),)
-  # Netlib: separate BLAS + LAPACK archives
-  STATIC_BLAS_LAPACK = $(NETLIB_LAPACK) -Wl,--whole-archive $(NETLIB_BLAS) -Wl,--no-whole-archive
-else ifneq ($(OPENBLAS_A),)
-  # OpenBLAS: single archive with BLAS+LAPACK bundled
-  STATIC_BLAS_LAPACK = -Wl,--whole-archive $(OPENBLAS_A) -Wl,--no-whole-archive
+ifeq ($(PLATFORM),linux)
+  NETLIB_BLAS   := $(firstword $(wildcard \
+      /usr/lib/x86_64-linux-gnu/blas/libblas.a \
+      /usr/lib/blas/libblas.a))
+  NETLIB_LAPACK := $(firstword $(wildcard \
+      /usr/lib/x86_64-linux-gnu/lapack/liblapack.a \
+      /usr/lib/lapack/liblapack.a))
+  OPENBLAS_A    := $(firstword $(wildcard \
+      /usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.a \
+      /usr/lib/x86_64-linux-gnu/openblas-serial/libblas.a \
+      /usr/lib/x86_64-linux-gnu/libblas.a))
+
+  ifneq ($(NETLIB_BLAS),)
+    # Netlib: link on demand (no --whole-archive to avoid non-PIC cblas objects).
+    # Order: LAPACK first, then BLAS (LAPACK depends on BLAS).
+    # --allow-multiple-definition handles lsame_/xerbla_ duplicates.
+    STATIC_BLAS_LAPACK = -Wl,--allow-multiple-definition \
+        $(NETLIB_LAPACK) $(NETLIB_BLAS)
+  else ifneq ($(OPENBLAS_A),)
+    STATIC_BLAS_LAPACK = \
+        -Wl,--whole-archive $(OPENBLAS_A) -Wl,--no-whole-archive
+  else
+    $(error No static libblas.a found. Install libblas-dev or libopenblas-dev)
+  endif
+
+  MEXLINKLIBS = -L$(MATLAB_LIB) -Wl,-rpath-link,$(MATLAB_LIB) -lmx -lmex \
+                $(SS_LIB_FLAGS) $(UMFPACK_LIBS) \
+                $(STATIC_BLAS_LAPACK) \
+                -lgfortran -lgomp -lm \
+                -Wl,-Bsymbolic -Wl,--version-script,$(VERSION_MAP)
+
+else ifeq ($(PLATFORM),macos)
+  # macOS: use Accelerate framework or Homebrew OpenBLAS
+  OPENBLAS_PREFIX := $(shell brew --prefix openblas 2>/dev/null)
+  ifneq ($(OPENBLAS_PREFIX),)
+    # Homebrew OpenBLAS - static .a is built with -fPIC on macOS
+    OPENBLAS_MACOS_A := $(wildcard $(OPENBLAS_PREFIX)/lib/libopenblas.a)
+    ifneq ($(OPENBLAS_MACOS_A),)
+      STATIC_BLAS_LAPACK = -force_load $(OPENBLAS_MACOS_A)
+    else
+      STATIC_BLAS_LAPACK = -L$(OPENBLAS_PREFIX)/lib -lopenblas
+    endif
+  else
+    # Fallback: Apple Accelerate (no MKL conflict on macOS)
+    STATIC_BLAS_LAPACK = -framework Accelerate
+  endif
+
+  # macOS uses -exported_symbols_list instead of --version-script
+  MEXLINKLIBS = -L$(MATLAB_LIB) -Wl,-rpath,$(MATLAB_LIB) -lmx -lmex \
+                $(SS_LIB_FLAGS) $(UMFPACK_LIBS) \
+                $(STATIC_BLAS_LAPACK) \
+                -lgfortran -lgomp -lm \
+                -Wl,-exported_symbol,_mexFunction \
+                -Wl,-exported_symbol,_mexfunction_
+
 else
-  $(error No static libblas.a found. Install libblas-dev or libopenblas-dev)
+  # Windows (MSYS2/MinGW): static link everything
+  MEXLINKLIBS = -L$(MATLAB_LIB) -lmx -lmex \
+                $(SS_LIB_FLAGS) $(UMFPACK_LIBS) \
+                -lopenblas -lgfortran -lgomp -lm \
+                -static-libgcc -static-libgfortran \
+                -Wl,-Bstatic -lgomp -lwinpthread -Wl,-Bdynamic
 endif
-
-# ---------- Link libraries ----------
-# Static BLAS/LAPACK + version script + -Bsymbolic = dgemm_ hidden from MKL.
-MEXLINKLIBS = -L$(MATLAB_LIB) -Wl,-rpath-link,$(MATLAB_LIB) -lmx -lmex \
-              $(SS_LIB_FLAGS) $(UMFPACK_LIBS) \
-              $(STATIC_BLAS_LAPACK) \
-              -lgfortran -lgomp -lm \
-              -Wl,-Bsymbolic -Wl,--version-script,$(VERSION_MAP)
 
 # ---------- Source files ----------
 F_SRCS := $(SRC_DIR)/blit_const.f90 \
@@ -141,8 +219,10 @@ F_OBJS := $(patsubst $(SRC_DIR)/%.f90,$(BUILD_DIR)/%.o,$(F_SRCS))
 C_OBJS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(C_SRCS))
 ALL_OBJS := $(F_OBJS) $(C_OBJS)
 
-TARGET := $(PRIVATE_DIR)/blqmr_.$(MEX_EXT)
+TARGET := $(MEX_DIR)/blqmr_.$(MEX_EXT)
 
+# =============================================================================
+# Rules
 # =============================================================================
 
 .PHONY: all clean test dirs
@@ -150,15 +230,23 @@ TARGET := $(PRIVATE_DIR)/blqmr_.$(MEX_EXT)
 all: dirs $(TARGET)
 
 dirs:
-	@mkdir -p $(BUILD_DIR) $(PRIVATE_DIR)
+	@mkdir -p $(BUILD_DIR)
 
 # ---------- Compile Fortran MEX gateway ----------
 $(MEX_GATE_OBJ): $(MEX_GATE) $(F_OBJS) | dirs
 	$(FC) $(FFLAGS) -DMATLAB_DEFAULT_RELEASE=R2017b -I$(MATLAB_INC) -I$(BUILD_DIR) -c $< -o $@
 
-# ---------- Link with gfortran -shared ----------
+# ---------- Link ----------
+ifeq ($(PLATFORM),windows)
+# Windows: use gfortran -shared, output .mexw64
+$(TARGET): $(MEX_GATE_OBJ) $(ALL_OBJS)
+	$(FC) -shared -o $@ $(MEX_GATE_OBJ) $(ALL_OBJS) $(MEXLINKLIBS) \
+	  -Wl,--output-def,$(BUILD_DIR)/blqmr_.def
+else
+# Linux/macOS: use gfortran -shared
 $(TARGET): $(MEX_GATE_OBJ) $(ALL_OBJS)
 	$(FC) -shared -o $@ $(MEX_GATE_OBJ) $(ALL_OBJS) $(MEXLINKLIBS)
+endif
 
 # ---------- Fortran objects ----------
 $(BUILD_DIR)/blit_const.o: $(SRC_DIR)/blit_const.f90 | dirs
@@ -188,7 +276,7 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | dirs
 # ---------- Housekeeping ----------
 clean:
 	rm -rf $(BUILD_DIR)
-	rm -f $(PRIVATE_DIR)/blqmr_.mex*
+	rm -f $(MEX_DIR)/blqmr_.mex*
 
 test:
 	matlab -batch "addpath('$(MEX_DIR)'); blqmr_test"

@@ -96,10 +96,14 @@ function [x, flag, relres, iter, resv] = blqmr(A, B, qtol, maxit, M1, M2, x0, va
 
 % Parse opt structure first
 opt = [];
-if (nargin > 7 && ~isempty(varargin{:}))
-    opt = varargin{1};
-    if (~isstruct(opt))
-        error('opt must be a structure');
+if (nargin > 7 && ~isempty(varargin))
+    if (length(varargin) > 1 && ischar(varargin{1}))
+        opt = struct(varargin{:});
+    else
+        opt = varargin{1};
+        if (~isstruct(opt))
+            error('opt must be a structure');
+        end
     end
 end
 
@@ -158,39 +162,28 @@ end
 %  Conditions: no custom M1/M2 provided, sparse A, no function handle precond,
 %  and user did not disable it via opt.usefortran=0
 
-use_fortran = exist('blqmr_', 'file') == 3;  % 3 = MEX file
+use_fortran = exist('blqmr_', 'file') == 3;
 
-% Check if user disabled Fortran
 if use_fortran && ~isempty(opt) && isfield(opt, 'usefortran')
-    use_fortran = opt.usefortran;
+    use_fortran = logical(opt.usefortran);
 end
 
-% Cannot use Fortran MEX when custom M1/M2 matrices are provided
-if use_fortran && ((nargin >= 5 && ~isempty(M1)) || (nargin >= 6 && ~isempty(M2)))
-    % User supplied custom preconditioner - fall through to MATLAB solver
-    % unless opt.precond was set (which we can map to Fortran pcond_type)
-    if isempty(opt) || ~isfield(opt, 'precond')
-        use_fortran = false;
-    end
-end
-
-% Cannot use Fortran MEX with function handle preconditioners
+% Cannot use Fortran with function handle preconditioner
 if use_fortran && nargin >= 5 && ~isempty(M1) && isa(M1, 'function_handle')
     use_fortran = false;
 end
 
-% Fortran MEX requires sparse input
+% Fortran requires sparse input
 if use_fortran && ~issparse(A)
     use_fortran = false;
 end
 
-% opt.residual (true residual mode) is not supported by Fortran backend
+% True residual mode not supported by Fortran
 if use_fortran && ~isempty(opt) && isfield(opt, 'residual') && opt.residual
     use_fortran = false;
 end
 
 if use_fortran
-    % Map parameters for Fortran MEX
     if nargin < 3 || isempty(qtol)
         qtol = 1e-6;
     end
@@ -198,46 +191,57 @@ if use_fortran
         maxit = min(n, 20);
     end
 
-    % Map preconditioner type to Fortran integer code
-    %   0 = none, 1 = ILU-left, 2 = ILU-split, 3 = Jacobi-split
-    pcond_type = 1;  % default: ILU-left
+    % Map preconditioner to Fortran integer code
+    %   0=none, 1=ILU-left, 2=ILU-split, 3=Jacobi-split
+    pcond_type = 0;
     droptol_f = 0.001;
+    nblock = 1;
 
+    % Check opt.precond first (string-based)
     if ~isempty(opt) && isfield(opt, 'precond')
         ptype = opt.precond;
-        if ischar(ptype) || isstring(ptype)
+        if ischar(ptype) || (exist('isstring', 'builtin') && isstring(ptype))
             switch lower(char(ptype))
                 case {'ilu', 'ilutp', 'ilut', 'ilu0'}
-                    pcond_type = 2;  % ILU-split (UMFPACK-based)
+                    pcond_type = 2;
                 case {'diag', 'jacobi'}
-                    pcond_type = 3;  % Jacobi-split
+                    pcond_type = 3;
                 case 'none'
                     pcond_type = 0;
                 otherwise
-                    pcond_type = 1;  % default ILU-left
+                    pcond_type = 1;
             end
         elseif isnumeric(ptype)
             pcond_type = ptype;
         end
-    elseif (nargin < 5 || isempty(M1)) && (nargin < 6 || isempty(M2))
-        % No preconditioner requested at all
-        pcond_type = 0;
+        % If M1/M2 are sparse matrices (not function handles), map to Fortran precond
+    elseif nargin >= 5 && ~isempty(M1)
+        if nargin >= 6 && ~isempty(M2)
+            if is_diagonal(M1) && is_diagonal(M2)
+                pcond_type = 3;
+            else
+                pcond_type = 2;
+            end
+        else
+            if is_diagonal(M1)
+                pcond_type = 3;
+            else
+                pcond_type = 1;
+            end
+        end
     end
 
     if ~isempty(opt) && isfield(opt, 'droptol')
         droptol_f = opt.droptol;
     end
 
-    % Map blocksize to nblock for OpenMP
-    nblock = 0;
     if ~isempty(opt) && isfield(opt, 'blocksize') && ~isempty(opt.blocksize)
         nblock = opt.blocksize;
     end
 
-    % Call Fortran MEX
     [x, flag, relres, iter] = blqmr_(A, B, qtol, maxit, ...
                                      pcond_type, droptol_f, nblock);
-    resv = [];  % Fortran backend does not return per-iteration residuals
+    resv = [];
     return
 end
 
@@ -783,4 +787,13 @@ resv = resv(1:iter);
 % Recover solution for split preconditioning
 if isprecond == 2
     x = M2 \ x;
+end
+
+%% check if a sparse matrix is diagonal (Octave-compatible)
+function tf = is_diagonal(M)
+if issparse(M)
+    [i, j] = find(M);
+    tf = all(i == j);
+else
+    tf = isequal(M, diag(diag(M)));
 end

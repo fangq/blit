@@ -287,3 +287,12 @@ else
     s = val;
 end
 end
+
+function A = make_poisson_2d(m)
+% MAKE_POISSON_2D  m^2 x m^2 2D Poisson matrix (5-point stencil)
+%   Octave-compatible replacement for gallery('poisson', m)
+e = ones(m, 1);
+T = spdiags([-e 2 * e -e], [-1 0 1], m, m);
+I = speye(m);
+A = kron(I, T) + kron(T, I);
+end
