@@ -43,10 +43,11 @@
 
             MTYPE(kind=Kdouble),dimension(:,:),intent(in) :: A
             MTYPE(kind=Kdouble),dimension(:,:),intent(out):: invA
-            integer :: n, info
-            MTYPE(kind=Kdouble),dimension(size(A,1)) :: work
+            integer :: n, info, lwork
             integer,dimension(size(A,1)) :: ipiv
             real(kind=Kdouble), parameter :: tol = 1.0d-14
+            MTYPE(kind=Kdouble) :: work_query(1)
+            MTYPE(kind=Kdouble), allocatable :: work(:)
 
             if(size(A,1)/=size(A,2)) then
                     stop
@@ -56,7 +57,6 @@
             ! Check for near-zero matrix (1x1 case or small norm)
             if (n == 1) then
                 if (abs(A(1,1)) < tol) then
-                    ! Singular 1x1 matrix - return large value or identity-like behavior
                     invA(1,1) = 0.0_Kdouble
                     return
                 else
@@ -72,18 +72,26 @@
             call zgetrf(n, n, invA, n, ipiv, info)
 #endif
             if(info/=0) then
-                    ! Matrix is singular - return zero matrix instead of stopping
-                    ! print *, 'warning: singular matrix in MatrixInversion, code:', info
                     invA = 0.0_Kdouble
                     return
             endif
+
+            ! Workspace query for optimal lwork
 #if MTYPEID == MTYPEID_REAL
-            call dgetri(n, invA, n, ipiv, work, n, info)
+            call dgetri(n, invA, n, ipiv, work_query, -1, info)
 #else
-            call zgetri(n, invA, n, ipiv, work, n, info)
+            call zgetri(n, invA, n, ipiv, work_query, -1, info)
 #endif
+            lwork = max(n, int(real(work_query(1))))
+            allocate(work(lwork))
+
+#if MTYPEID == MTYPEID_REAL
+            call dgetri(n, invA, n, ipiv, work, lwork, info)
+#else
+            call zgetri(n, invA, n, ipiv, work, lwork, info)
+#endif
+            deallocate(work)
             if(info/=0) then
-                    ! print *, 'warning: dgetri failed in MatrixInversion, code:', info
                     invA = 0.0_Kdouble
                     return
             endif
@@ -102,23 +110,33 @@
         MTYPE(kind=Kdouble),dimension(:,:),intent(out) :: Q, R
         MTYPE(kind=Kdouble),dimension(size(A,1),size(A,2))  :: tmp
         MTYPE(kind=Kdouble),dimension(min(size(A,1),size(A,2)))  :: tau
-        MTYPE(kind=Kdouble),dimension(max(size(A,1),1))  :: work
 
-        integer :: m, n, info, len, i, j, iseconomic
+        integer :: m, n, info, lwork, iseconomic, i, j
+        MTYPE(kind=Kdouble) :: work_query(1)
+        MTYPE(kind=Kdouble), allocatable :: work(:)
 
         tmp=A
         m=size(A,1)
         n=size(A,2)
-        len=max(m,1)
 
         R=0.0_Kdouble
+
+        ! Workspace query for zgeqrf/dgeqrf
 #if MTYPEID == MTYPEID_REAL
-        call dgeqrf(m, n, tmp, m, tau, work, len, info)
+        call dgeqrf(m, n, tmp, m, tau, work_query, -1, info)
 #else
-        call zgeqrf(m, n, tmp, m, tau, work, len, info)
+        call zgeqrf(m, n, tmp, m, tau, work_query, -1, info)
+#endif
+        lwork = max(1, int(real(work_query(1))))
+        allocate(work(lwork))
+
+#if MTYPEID == MTYPEID_REAL
+        call dgeqrf(m, n, tmp, m, tau, work, lwork, info)
+#else
+        call zgeqrf(m, n, tmp, m, tau, work, lwork, info)
 #endif
         if(info/=0) then
-                print *, 'error encontered when calling dgeqrf in QRDecomposition, code:', info
+                print *, 'error encountered when calling dgeqrf in QRDecomposition, code:', info
                 stop
         endif
         Q(:,1:n)=tmp
@@ -128,21 +146,41 @@
            enddo
         enddo
 
+        deallocate(work)
+
+        ! Workspace query for dorgqr/zungqr
 #if MTYPEID == MTYPEID_REAL
         if(iseconomic==0) then
-             call dorgqr(m, n, min(m, n), Q, size(tmp,1), tau, work, len, info)
+             call dorgqr(m, n, min(m, n), Q, size(tmp,1), tau, work_query, -1, info)
         else
-             call dorgqr(m, m, min(m, n), Q, m, tau, work, len, info)
+             call dorgqr(m, m, min(m, n), Q, m, tau, work_query, -1, info)
         endif
 #else
         if(iseconomic==0) then
-             call zungqr(m, n, min(m, n), Q, size(tmp,1), tau, work, len, info)
+             call zungqr(m, n, min(m, n), Q, size(tmp,1), tau, work_query, -1, info)
         else
-             call zungqr(m, m, min(m, n), Q, m, tau, work, len, info)
+             call zungqr(m, m, min(m, n), Q, m, tau, work_query, -1, info)
         endif
 #endif
+        lwork = max(1, int(real(work_query(1))))
+        allocate(work(lwork))
+
+#if MTYPEID == MTYPEID_REAL
+        if(iseconomic==0) then
+             call dorgqr(m, n, min(m, n), Q, size(tmp,1), tau, work, lwork, info)
+        else
+             call dorgqr(m, m, min(m, n), Q, m, tau, work, lwork, info)
+        endif
+#else
+        if(iseconomic==0) then
+             call zungqr(m, n, min(m, n), Q, size(tmp,1), tau, work, lwork, info)
+        else
+             call zungqr(m, m, min(m, n), Q, m, tau, work, lwork, info)
+        endif
+#endif
+        deallocate(work)
         if(info/=0) then
-                print *, 'error encontered when calling dorgqr in QRDecomposition, code:', info
+                print *, 'error encountered when calling dorgqr in QRDecomposition, code:', info
                 stop
         endif
 

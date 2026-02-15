@@ -58,11 +58,20 @@ if (iseco == 0 && m > n)
     q = [A zeros(m, m - n)];
 end
 
+tol = 1e-14;
+
 for k = 1:n
     r(k, k) = sqrt(q(:, k).' * q(:, k));
-    q(:, k) = q(:, k) * (1 / r(k, k));
-    for j = k + 1:n
-        r(k, j) = q(:, k).' * q(:, j);
-        q(:, j) = q(:, j) - r(k, j) * q(:, k);
+    if abs(r(k, k)) > tol
+        q(:, k) = q(:, k) * (1 / r(k, k));
+        for j = k + 1:n
+            r(k, j) = q(:, k).' * q(:, j);
+            q(:, j) = q(:, j) - r(k, j) * q(:, k);
+        end
+    else
+        % Near-zero quasi-norm: zero out column, skip orthogonalization
+        % (matches Fortran QuasiQR behavior for complex symmetric systems
+        % where v.'*v can vanish even when v'*v is nonzero)
+        q(:, k) = 0;
     end
 end

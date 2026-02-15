@@ -23,5 +23,6 @@ pretty:
 	    --formatted \
 	    --break-blocks \
 	   "include/*.h" "cpp/example/*.c*" "matlab/src/*.c" "src/*.c"
+	mh_style --fix .
 
 .DEFAULT_GOAL=all
